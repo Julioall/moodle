@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Auditoria de Sala"
+  short_description: "Audite a estrutura da sala virtual"
+  default_prompt: "Use $moodle-classroom-audit para auditar a sala virtual e separar achados confirmados de não verificáveis."

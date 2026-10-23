@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Relatórios"
+  short_description: "Gere relatórios com cobertura explícita"
+  default_prompt: "Use $moodle-reports para gerar relatórios com população, fontes, cobertura e limitações explícitas."

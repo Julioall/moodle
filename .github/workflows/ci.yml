@@ -1,0 +1,172 @@
+name: CI - Build, Testes e Qualidade
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+    paths:
+      - src/**
+      - tests/**
+      - plugins/**
+      - scripts/**
+      - public/**
+      - deploy/**
+      - .dockerignore
+      - .editorconfig
+      - .gitattributes
+      - .env.example
+      - chatgpt-app-submission.json
+      - Moodle.slnx
+      - .github/workflows/ci.yml
+      - .github/workflows/deploy-vps.yml
+      - .github/workflows/plugin-release.yml
+      - .github/workflows/moodle-diagnostics-operations.yml
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - master
+      - dev
+    paths:
+      - src/**
+      - tests/**
+      - plugins/**
+      - scripts/**
+      - public/**
+      - docs/**
+      - deploy/**
+      - .dockerignore
+      - .editorconfig
+      - .gitattributes
+      - .env.example
+      - chatgpt-app-submission.json
+      - Moodle.slnx
+      - .github/workflows/ci.yml
+      - .github/workflows/docs-validation.yml
+      - .github/workflows/deploy-vps.yml
+      - .github/workflows/plugin-release.yml
+      - .github/workflows/moodle-diagnostics-operations.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: ${{ vars.DOTNET_VERSION || '10.0.x' }}
+
+jobs:
+  test-and-validate:
+    name: Build, testes e verificações
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    env:
+      MOODLE_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=MOODLE_ci_test;Username=MOODLE;Password=ci-postgres-password
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: MOODLE_ci_test
+          POSTGRES_USER: MOODLE
+          POSTGRES_PASSWORD: ci-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U MOODLE -d MOODLE_ci_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Moodle.Web/package-lock.json
+
+      - name: Validate Web Portal
+        working-directory: src/Moodle.Web
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore .NET
+        run: dotnet restore Moodle.slnx
+
+      - name: Build .NET
+        run: |
+          unset APP_DOMAIN
+          unset OAUTH_ISSUER
+          unset OAUTH_AUDIENCE
+          unset OAUTH_CHATGPT_REDIRECT_URI
+          dotnet build Moodle.slnx --configuration Release --no-restore --no-incremental
+
+      - name: Test Unit & Mock Integration
+        run: dotnet test Moodle.slnx --configuration Release --no-build --no-restore --filter "Category!=PostgresIntegration&Category!=ManualPerformance"
+
+      - name: PostgreSQL integration gate
+        run: dotnet test Moodle.slnx --configuration Release --no-build --no-restore --settings tests/postgres.runsettings --filter "Category=PostgresIntegration"
+
+      - name: Validate plugin package
+        shell: pwsh
+        run: ./scripts/validate-plugin.ps1
+
+      - name: Build portable plugin package
+        shell: pwsh
+        run: ./scripts/package-moodle-plugin.ps1 -OutputPath artifacts/moodle-plugin.zip
+
+      - name: Validate generated submission tools
+        shell: pwsh
+        run: ./scripts/generate-chatgpt-app-submission.ps1 -Check
+
+      - name: Validate packaged skills
+        run: python plugins/moodle-connector/skills/moodle-core/scripts/check_skill_catalog.py --repo-root .
+
+      - name: Validate skill trigger corpus
+        run: python -c "import json; d=json.load(open('plugins/moodle-connector/evals/skill-trigger-cases.json', encoding='utf-8')); assert len(d['cases']) >= 52"
+
+      - name: Validate documentation
+        shell: pwsh
+        run: ./scripts/check-documentation.ps1
+
+      - name: Validate GitHub Actions
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.7
+
+      - name: Validate delivery files
+        run: |
+          python scripts/check-dockerfile-encoding.py
+          bash -n scripts/check-public-readiness.sh
+
+      - name: Validate delivery topology
+        run: |
+          export ENV_FILE=.env.example
+          export POSTGRES_PASSWORD=ci-compose-validation-password
+          docker compose --project-directory . -f deploy/docker-compose.yml config --quiet
+          docker compose --project-directory . -f deploy/docker-compose.yml config --format json | python -c "import json, sys; app = json.load(sys.stdin)['services']['app']; ports = app['ports']; env = app['environment']; assert any(port.get('host_ip') == '127.0.0.1' and port.get('target') == 8080 for port in ports), 'app must bind only to 127.0.0.1'; assert env.get('GradingLimits__GradingPackageBlobRootDirectory') == '/app/data/private-grading-packages', 'grading package blobs must use persistent app-data storage'"
+          docker compose --project-directory . -f deploy/docker-compose.local.yml config --quiet
+          docker compose --project-directory . -f deploy/docker-compose.local.yml config --format json | python -c "import json, sys; env = json.load(sys.stdin)['services']['app']['environment']; assert env.get('GradingLimits__GradingPackageBlobRootDirectory') == '/app/data/private-grading-packages', 'local grading package blobs must use persistent app-data storage'"
+          docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -e APP_DOMAIN=moodle.localhost caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Build production image
+        run: docker build -f deploy/Dockerfile --tag moodle-ci:local .
+
+      - name: Verify production container contract
+        shell: pwsh
+        run: ./scripts/verify-production-container.ps1 -Image moodle-ci:local -RequireGradingPackageTransport

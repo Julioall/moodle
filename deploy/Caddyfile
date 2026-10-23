@@ -1,0 +1,9 @@
+{$APP_DOMAIN} {
+	encode gzip zstd
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+	}
+	reverse_proxy app:8080
+}

@@ -1,0 +1,25 @@
+name: Build Moodle Plugin Package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate and package plugin
+        shell: pwsh
+        run: ./scripts/package-moodle-plugin.ps1 -OutputPath artifacts/moodle-plugin.zip
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: moodle-plugin
+          path: artifacts/moodle-plugin.zip
+          if-no-files-found: error

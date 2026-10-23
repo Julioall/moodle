@@ -1,0 +1,64 @@
+﻿services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: moodle:local
+    container_name: moodle-local-app
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      MOODLE_VERSION: "${MOODLE_VERSION:-local}"
+      MOODLE_COMMIT: "${MOODLE_COMMIT:-unknown}"
+      MOODLE_BUILD_ID: "${MOODLE_BUILD_ID:-local}"
+      MOODLE_BUILD_AT: "${MOODLE_BUILD_AT:-}"
+      MOODLE_DEPLOYED_AT: "${MOODLE_DEPLOYED_AT:-}"
+      MOODLE_SOURCE_REF: "${MOODLE_SOURCE_REF:-working-tree}"
+      Features__AppV2Enabled: "true"
+      Features__CourseDetailsOverviewV1Enabled: "${COURSE_DETAILS_OVERVIEW_V1_ENABLED:-true}"
+      Reports__TemplatesEnabled: "${REPORTS_TEMPLATES_ENABLED:-true}"
+      DataProtection__KeyStoragePath: /app/data/keys
+      GradingLimits__GradingPackageBlobRootDirectory: /app/data/private-grading-packages
+      # Este perfil local sempre usa Moodle real; variáveis do host não podem
+      # reativar respostas sintéticas.
+      MoodleApi__UseStubData: "false"
+      MoodleProxy__UseStubData: "false"
+      # Estes Moodle podem usar DNS corporativo. Cada exceção fica limitada ao
+      # hostname exato e não libera outros destinos privados.
+      MoodleApi__TrustedPrivateEndpointHosts__0: "${MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0:-ead.fieg.com.br}"
+      MoodleApi__TrustedPrivateEndpointHosts__1: "${MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_1:-ead.senai.br}"
+      RateLimiting__AppAuthPermitLimit: "120"
+      Postgres__ConnectionString: Host=postgres;Database=MOODLE;Username=MOODLE;Password=app-local-only
+      ConnectorSecrets__EncryptionKeyBase64: "${CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}"
+    ports:
+      - "127.0.0.1:${APP_HTTP_PORT:-8787}:8080"
+    volumes:
+      - app-local-app-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: moodle-local-postgres
+    environment:
+      POSTGRES_DB: MOODLE
+      POSTGRES_USER: MOODLE
+      POSTGRES_PASSWORD: app-local-only
+    volumes:
+      - app-local-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U MOODLE -d MOODLE"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  app-local-app-data:
+  app-local-postgres-data:

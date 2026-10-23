@@ -1,0 +1,328 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-blue: 215 100% 47%;
+    --brand-blue-on-dark: 215 100% 70%;
+    --brand-cyan: 202 98% 50%;
+
+    --background: 208 30% 97%;
+    --foreground: 217 54% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 217 54% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 54% 20%;
+
+    --primary: var(--brand-blue);
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 22% 94%;
+    --secondary-foreground: 217 54% 20%;
+
+    --muted: 210 22% 94%;
+    --muted-foreground: 217 27% 35%;
+
+    --accent: 202 100% 96%;
+    --accent-foreground: 217 54% 20%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 210 18% 89%;
+    --input: 210 18% 85%;
+    --ring: var(--brand-blue);
+
+    --radius: 0.375rem;
+
+    /* Risk level colors - semantic tokens */
+    --risk-normal: 142 70% 45%;
+    --risk-normal-bg: 142 60% 95%;
+    --risk-atencao: 45 90% 50%;
+    --risk-atencao-bg: 45 90% 95%;
+    --risk-risco: 25 95% 53%;
+    --risk-risco-bg: 25 90% 95%;
+    --risk-critico: 0 72% 51%;
+    --risk-critico-bg: 0 70% 95%;
+
+    /* Status colors */
+    --status-success: 142 70% 45%;
+    --status-success-bg: 142 60% 95%;
+    --status-warning: 45 90% 50%;
+    --status-warning-bg: 45 90% 95%;
+    --status-pending: 220 80% 55%;
+    --status-pending-bg: 220 80% 95%;
+
+    /* Priority colors */
+    --priority-baixa: 210 15% 50%;
+    --priority-media: 220 80% 55%;
+    --priority-alta: 25 95% 53%;
+    --priority-urgente: 0 72% 51%;
+
+    /* Sidebar */
+    --sidebar-background: 208 30% 97%;
+    --sidebar-foreground: 217 54% 20%;
+    --sidebar-primary: var(--brand-blue);
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 202 100% 96%;
+    --sidebar-accent-foreground: 217 54% 20%;
+    --sidebar-border: 220 14% 89%;
+    --sidebar-ring: var(--brand-blue);
+
+    /* Custom shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(215 25% 15% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(215 25% 15% / 0.07), 0 2px 4px -2px hsl(215 25% 15% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(215 25% 15% / 0.08), 0 4px 6px -4px hsl(215 25% 15% / 0.05);
+  }
+
+  .dark {
+    --background: 220 16% 10%;
+    --foreground: 210 20% 94%;
+
+    --card: 220 15% 13%;
+    --card-foreground: 210 20% 94%;
+
+    --popover: 220 15% 13%;
+    --popover-foreground: 210 20% 94%;
+
+    --primary: var(--brand-blue-on-dark);
+    --primary-foreground: 220 16% 10%;
+
+    --secondary: 220 14% 20%;
+    --secondary-foreground: 210 20% 94%;
+
+    --muted: 220 14% 20%;
+    --muted-foreground: 215 12% 68%;
+
+    --accent: 205 52% 22%;
+    --accent-foreground: 210 20% 94%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 95%;
+
+    --border: 220 14% 24%;
+    --input: 220 14% 28%;
+    --ring: var(--brand-blue-on-dark);
+
+    --risk-normal: 142 60% 50%;
+    --risk-normal-bg: 142 40% 15%;
+    --risk-atencao: 45 80% 55%;
+    --risk-atencao-bg: 45 50% 15%;
+    --risk-risco: 25 90% 55%;
+    --risk-risco-bg: 25 50% 15%;
+    --risk-critico: 0 65% 55%;
+    --risk-critico-bg: 0 40% 15%;
+
+    --sidebar-background: 220 17% 12%;
+    --sidebar-foreground: 210 20% 94%;
+    --sidebar-primary: var(--brand-blue-on-dark);
+    --sidebar-primary-foreground: 220 16% 10%;
+    --sidebar-accent: 205 45% 22%;
+    --sidebar-accent-foreground: 210 20% 94%;
+    --sidebar-border: 220 14% 22%;
+    --sidebar-ring: var(--brand-blue-on-dark);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  @keyframes background-activity-line {
+    0% {
+      transform: translateX(-140%);
+    }
+
+    100% {
+      transform: translateX(calc(100vw + 10rem));
+    }
+  }
+
+  /* Risk badges */
+  .risk-normal {
+    @apply bg-[hsl(var(--risk-normal-bg))] text-[hsl(var(--risk-normal))] border-[hsl(var(--risk-normal)/0.3)];
+  }
+  .risk-atencao {
+    @apply bg-[hsl(var(--risk-atencao-bg))] text-[hsl(var(--risk-atencao))] border-[hsl(var(--risk-atencao)/0.3)];
+  }
+  .risk-risco {
+    @apply bg-[hsl(var(--risk-risco-bg))] text-[hsl(var(--risk-risco))] border-[hsl(var(--risk-risco)/0.3)];
+  }
+  .risk-critico {
+    @apply bg-[hsl(var(--risk-critico-bg))] text-[hsl(var(--risk-critico))] border-[hsl(var(--risk-critico)/0.3)];
+  }
+  .risk-inativo {
+    @apply bg-muted text-muted-foreground border-border;
+  }
+
+  /* Priority badges */
+  .priority-baixa {
+    @apply text-[hsl(var(--priority-baixa))];
+  }
+  .priority-media {
+    @apply text-[hsl(var(--priority-media))];
+  }
+  .priority-alta {
+    @apply text-[hsl(var(--priority-alta))];
+  }
+  .priority-urgente {
+    @apply text-[hsl(var(--priority-urgente))];
+  }
+
+  /* Card hover effects */
+  .card-interactive {
+    @apply transition-all duration-200 hover:shadow-md hover:border-primary/20;
+  }
+
+  .sidebar-nav-active {
+    background-image: linear-gradient(110deg, hsl(var(--brand-cyan) / 0.16), hsl(var(--brand-blue) / 0.07));
+    box-shadow: inset 2px 0 0 hsl(var(--brand-blue));
+  }
+
+  /* Stat cards */
+  .stat-card {
+    @apply rounded-lg border bg-card p-4 shadow-sm;
+  }
+
+  /* Timeline connector */
+  .timeline-connector {
+    @apply absolute left-4 top-10 -bottom-6 w-0.5 bg-border;
+  }
+
+  /* Mono text for data */
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .background-activity-line {
+    animation: background-activity-line 1.5s ease-in-out infinite;
+  }
+
+  /* Shared page primitives used by the operational modules. Keeping these
+     tokens here avoids page-specific CSS and keeps the visual rhythm stable. */
+  .content-frame {
+    @apply mx-auto w-full max-w-7xl space-y-6;
+  }
+
+  .page-heading {
+    @apply flex flex-col gap-4 md:flex-row md:items-center md:justify-between;
+  }
+
+  .page-heading h1 {
+    @apply text-2xl font-bold tracking-tight;
+  }
+
+  .page-heading p:not(.eyebrow):not(.freshness) {
+    @apply mt-1 text-sm text-muted-foreground;
+  }
+
+  .eyebrow {
+    @apply hidden;
+  }
+
+  .freshness {
+    @apply text-left text-xs text-muted-foreground sm:text-right;
+  }
+
+  .student-grid {
+    @apply grid gap-4 md:grid-cols-2 xl:grid-cols-3;
+  }
+
+  .student-card-heading {
+    @apply flex items-start justify-between gap-3;
+  }
+
+  .student-card-heading h2 {
+    @apply text-base font-semibold;
+  }
+
+  .student-card-heading p,
+  .student-card-meta {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .student-card-meta {
+    @apply mt-4 flex items-center justify-between gap-3 border-t pt-3;
+  }
+
+  .task-form {
+    @apply grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(170px,220px)_auto];
+  }
+
+  .task-form textarea {
+    @apply min-h-24 md:col-span-2;
+  }
+
+  .task-form input,
+  .task-form select,
+  .task-form textarea,
+  .form-grid input,
+  .form-grid select,
+  .form-grid textarea,
+  .ui-input {
+    @apply flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+
+  .form-grid {
+    @apply grid gap-4 md:grid-cols-2;
+  }
+
+  .form-grid label {
+    @apply grid gap-1.5 text-sm font-medium;
+  }
+
+  .dashboard-stats {
+    @apply grid gap-4 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
+  .dashboard-stats strong {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  .dashboard-row {
+    @apply flex items-start justify-between gap-4 border-b py-3 last:border-0;
+  }
+
+  .dashboard-row div {
+    @apply grid gap-1;
+  }
+
+  .dashboard-row span {
+    @apply text-sm text-muted-foreground;
+  }
+
+  @media (max-width: 640px) {
+    .task-form {
+      @apply grid-cols-1;
+    }
+
+    .task-form textarea {
+      @apply col-span-1;
+    }
+  }
+}

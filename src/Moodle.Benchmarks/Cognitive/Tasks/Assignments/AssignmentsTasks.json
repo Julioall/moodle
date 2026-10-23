@@ -1,0 +1,123 @@
+[
+  {
+    "id": "assignments.activities.001",
+    "category": "assignments",
+    "prompt": "No SENAI, liste as atividades de tarefa do curso 8887.",
+    "expectedIntent": "assignments.activities",
+    "allowedOperations": [ "list_course_assignments", "list_course_activities", "mod_assign_get_assignments" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.activities.002",
+    "category": "assignments",
+    "prompt": "No Moodle FIEG, mostre as tarefas disponíveis no curso 33458.",
+    "expectedIntent": "assignments.activities",
+    "allowedOperations": [ "list_course_assignments", "list_course_activities", "mod_assign_get_assignments" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "fieg",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.activities.003",
+    "category": "assignments",
+    "prompt": "No SENAI, consulte os detalhes da tarefa 1 no curso 8887 usando o identificador da atividade.",
+    "expectedIntent": "assignments.activities",
+    "allowedOperations": [ "get_assignment", "get_course_activity", "list_course_assignments", "mod_assign_get_assignments" ],
+    "forbiddenOperations": [ "list_assignment_submissions", "mod_assign_get_submissions" ],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.submissions.001",
+    "category": "assignments",
+    "prompt": "No SENAI, liste as submissões da tarefa 1 no curso 8887.",
+    "expectedIntent": "assignments.submissions",
+    "allowedOperations": [ "list_assignment_submissions", "mod_assign_get_submissions" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.submissions.002",
+    "category": "assignments",
+    "prompt": "No Moodle FIEG, consulte o status da submissão 1 da tarefa 1 no curso 33458.",
+    "expectedIntent": "assignments.submissions",
+    "allowedOperations": [ "get_submission_status", "mod_assign_get_submission_status", "get_student_submission" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "fieg",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.submissions.003",
+    "category": "assignments",
+    "prompt": "No SENAI, encontre as entregas atrasadas da tarefa 1 no curso 8887.",
+    "expectedIntent": "assignments.submissions",
+    "allowedOperations": [ "list_late_submissions", "list_assignment_submissions", "mod_assign_get_submissions" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.submissions.004",
+    "category": "assignments",
+    "prompt": "No Moodle FIEG, liste os alunos que ainda nao entregaram a tarefa 1 do curso 33458.",
+    "expectedIntent": "assignments.submissions",
+    "allowedOperations": [ "list_pending_submissions", "list_assignment_submissions", "mod_assign_get_submissions" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "fieg",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.pagination.001",
+    "category": "assignments",
+    "prompt": "No SENAI, liste todas as submissoes da tarefa 1 no curso 8887 e informe se ainda existem paginas.",
+    "expectedIntent": "assignments.submissions",
+    "allowedOperations": [ "list_assignment_submissions", "mod_assign_get_submissions" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": true,
+    "expectedConnection": "senai",
+    "isCriticalTask": true
+  },
+  {
+    "id": "assignments.ambiguity.001",
+    "category": "assignments",
+    "prompt": "No Moodle FIEG, encontre a tarefa chamada Trabalho Final no curso 33458; se houver mais de uma, mostre a ambiguidade.",
+    "expectedIntent": "assignments.activities",
+    "allowedOperations": [ "list_course_assignments", "list_course_activities", "get_assignment", "mod_assign_get_assignments" ],
+    "forbiddenOperations": [ "list_assignment_submissions", "mod_assign_get_submissions" ],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "fieg",
+    "isCriticalTask": false
+  },
+  {
+    "id": "assignments.connection.001",
+    "category": "assignments",
+    "prompt": "Use somente a conexao SENAI para consultar as tarefas do curso 8887.",
+    "expectedIntent": "assignments.activities",
+    "allowedOperations": [ "list_course_assignments", "list_course_activities", "mod_assign_get_assignments" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": true
+  },
+  {
+    "id": "assignments.negative.001",
+    "category": "assignments",
+    "prompt": "No SENAI, consulte a tarefa 999999 no curso 8887. Se ela nao existir, informe que nao foi encontrada sem inventar uma submissao.",
+    "expectedIntent": "assignments.submissions",
+    "allowedOperations": [ "get_submission_status", "get_student_submission", "list_assignment_submissions", "mod_assign_get_submission_status", "mod_assign_get_submissions" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  }
+]

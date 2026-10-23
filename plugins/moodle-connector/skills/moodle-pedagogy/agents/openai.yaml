@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Pedagogia"
+  short_description: "Recupere orientações pedagógicas"
+  default_prompt: "Use $moodle-pedagogy para recuperar orientação pedagógica institucional antes de uma intervenção."

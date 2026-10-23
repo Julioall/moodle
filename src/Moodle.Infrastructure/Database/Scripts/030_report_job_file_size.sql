@@ -1,0 +1,1 @@
+ALTER TABLE report_jobs ADD COLUMN IF NOT EXISTS "FileSizeBytes" bigint NOT NULL DEFAULT 0;

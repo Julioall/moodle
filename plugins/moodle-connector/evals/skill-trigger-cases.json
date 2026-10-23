@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "moodle-core-direct",
+      "skill": "moodle-core",
+      "kind": "direct",
+      "prompt": "Diagnostique por que o conector não encontra essa capability.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-core-indirect",
+      "skill": "moodle-core",
+      "kind": "indirect",
+      "prompt": "A escrita ficou execution_unknown; o que faço agora?",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-core-negative",
+      "skill": "moodle-core",
+      "kind": "negative",
+      "prompt": "Liste as tarefas do curso 123.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-core-edge",
+      "skill": "moodle-core",
+      "kind": "edge",
+      "prompt": "A tool que eu esperava não aparece em Production; verifique a rota disponível.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-memory-direct",
+      "skill": "moodle-memory",
+      "kind": "direct",
+      "prompt": "Salve este alias como minha conexão preferida no conector.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-memory-indirect",
+      "skill": "moodle-memory",
+      "kind": "indirect",
+      "prompt": "Qual modelo pedagógico eu já guardei para este curso?",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-memory-negative",
+      "skill": "moodle-memory",
+      "kind": "negative",
+      "prompt": "Quem são os alunos deste curso?",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-memory-edge",
+      "skill": "moodle-memory",
+      "kind": "edge",
+      "prompt": "Remova o documento de memória que eu indicar, mas não apague outras memórias.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-courses-direct",
+      "skill": "moodle-courses",
+      "kind": "direct",
+      "prompt": "Liste meus cursos no Moodle.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-courses-indirect",
+      "skill": "moodle-courses",
+      "kind": "indirect",
+      "prompt": "Qual curso corresponde ao shortname IA-2026 e quais módulos ele tem?",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-courses-negative",
+      "skill": "moodle-courses",
+      "kind": "negative",
+      "prompt": "Leia o conteúdo do SCORM deste curso.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-courses-edge",
+      "skill": "moodle-courses",
+      "kind": "edge",
+      "prompt": "Há dois cursos com nomes parecidos; não escolha sem resolver o identificador.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-content-direct",
+      "skill": "moodle-content",
+      "kind": "direct",
+      "prompt": "Leia o conteúdo deste SCORM no Moodle.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-content-indirect",
+      "skill": "moodle-content",
+      "kind": "indirect",
+      "prompt": "Abra o arquivo do curso e resuma o que realmente está nele.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-content-negative",
+      "skill": "moodle-content",
+      "kind": "negative",
+      "prompt": "Liste somente as seções e módulos do curso.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-content-edge",
+      "skill": "moodle-content",
+      "kind": "edge",
+      "prompt": "O arquivo apareceu na lista, mas ainda não foi lido; leia antes de concluir.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-assignments-direct",
+      "skill": "moodle-assignments",
+      "kind": "direct",
+      "prompt": "Liste as submissões pendentes desta tarefa.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-assignments-indirect",
+      "skill": "moodle-assignments",
+      "kind": "indirect",
+      "prompt": "Quem entregou atrasado esta atividade?",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-assignments-negative",
+      "skill": "moodle-assignments",
+      "kind": "negative",
+      "prompt": "Corrija as entregas e publique as notas.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-assignments-edge",
+      "skill": "moodle-assignments",
+      "kind": "edge",
+      "prompt": "Verifique todas as páginas antes de dizer que um aluno não entregou.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-students-direct",
+      "skill": "moodle-students",
+      "kind": "direct",
+      "prompt": "Liste os estudantes e grupos deste curso.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-students-indirect",
+      "skill": "moodle-students",
+      "kind": "indirect",
+      "prompt": "Resolva qual userid corresponde a este participante no curso.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-students-negative",
+      "skill": "moodle-students",
+      "kind": "negative",
+      "prompt": "Quem está em risco por nota e inatividade?",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-students-edge",
+      "skill": "moodle-students",
+      "kind": "edge",
+      "prompt": "Há dois alunos com o mesmo nome; não escolha por aproximação.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-grading-direct",
+      "skill": "moodle-grading",
+      "kind": "direct",
+      "prompt": "Corrija as submissões, gere nota e feedback e mostre a prévia antes de publicar.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-grading-indirect",
+      "skill": "moodle-grading",
+      "kind": "indirect",
+      "prompt": "Quero reavaliar as entregas já corrigidas desta atividade.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-grading-package-zip",
+      "skill": "moodle-grading",
+      "kind": "direct",
+      "prompt": "Prepare pacotes ZIP por atividade para este gradingRunId e importe os resultados como rascunhos.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-grading-negative",
+      "skill": "moodle-grading",
+      "kind": "negative",
+      "prompt": "Quem ainda não enviou esta tarefa?",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-grading-edge",
+      "skill": "moodle-grading",
+      "kind": "edge",
+      "prompt": "A confirmação foi authorized; verifique o commitStatus antes de dizer que publicou.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-follow-up-direct",
+      "skill": "moodle-follow-up",
+      "kind": "direct",
+      "prompt": "Identifique estudantes que precisam de acompanhamento nesta semana.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-follow-up-indirect",
+      "skill": "moodle-follow-up",
+      "kind": "indirect",
+      "prompt": "Cruze falta de acesso, pendências e notas baixas para priorizar intervenção.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-follow-up-negative",
+      "skill": "moodle-follow-up",
+      "kind": "negative",
+      "prompt": "Envie uma mensagem de cobrança para estes IDs.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-follow-up-edge",
+      "skill": "moodle-follow-up",
+      "kind": "edge",
+      "prompt": "A cobertura está parcial; não trate a triagem como censo da turma.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-forums-direct",
+      "skill": "moodle-forums",
+      "kind": "direct",
+      "prompt": "Leia este fórum e identifique quem ainda não participou.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-forums-indirect",
+      "skill": "moodle-forums",
+      "kind": "indirect",
+      "prompt": "Prepare uma resposta para esta discussão e, se eu pedir publicação, mostre a prévia.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-forums-negative",
+      "skill": "moodle-forums",
+      "kind": "negative",
+      "prompt": "Envie uma mensagem privada para o aluno.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-forums-edge",
+      "skill": "moodle-forums",
+      "kind": "edge",
+      "prompt": "Quero só um rascunho de postagem; não crie ação pendente.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-messaging-direct",
+      "skill": "moodle-messaging",
+      "kind": "direct",
+      "prompt": "Prepare uma mensagem de acompanhamento para estes alunos e mostre antes de enviar.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-messaging-indirect",
+      "skill": "moodle-messaging",
+      "kind": "indirect",
+      "prompt": "Redija uma cobrança de acesso para os destinatários selecionados.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-messaging-negative",
+      "skill": "moodle-messaging",
+      "kind": "negative",
+      "prompt": "Identifique quais alunos estão inativos.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-messaging-edge",
+      "skill": "moodle-messaging",
+      "kind": "edge",
+      "prompt": "Quero apenas revisar o texto da mensagem, sem criar pending action.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-pedagogy-direct",
+      "skill": "moodle-pedagogy",
+      "kind": "direct",
+      "prompt": "Busque a orientação pedagógica institucional para feedback formativo.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-pedagogy-indirect",
+      "skill": "moodle-pedagogy",
+      "kind": "indirect",
+      "prompt": "Use o modelo pedagógico salvo para orientar esta intervenção.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-pedagogy-negative",
+      "skill": "moodle-pedagogy",
+      "kind": "negative",
+      "prompt": "Liste os participantes do curso.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-pedagogy-edge",
+      "skill": "moodle-pedagogy",
+      "kind": "edge",
+      "prompt": "Se não houver orientação recuperada, não invente uma norma institucional.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-reports-direct",
+      "skill": "moodle-reports",
+      "kind": "direct",
+      "prompt": "Gere o relatório semanal de desempenho desta turma.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-reports-indirect",
+      "skill": "moodle-reports",
+      "kind": "indirect",
+      "prompt": "Quero um Excel com as notas totais do curso e cobertura explícita.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-reports-negative",
+      "skill": "moodle-reports",
+      "kind": "negative",
+      "prompt": "Qual é a nota deste único aluno?",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-reports-edge",
+      "skill": "moodle-reports",
+      "kind": "edge",
+      "prompt": "O relatório tem cobertura parcial; preserve desconhecidos e denominador.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-classroom-audit-direct",
+      "skill": "moodle-classroom-audit",
+      "kind": "direct",
+      "prompt": "Audite a sala virtual com o checklist institucional.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-classroom-audit-indirect",
+      "skill": "moodle-classroom-audit",
+      "kind": "indirect",
+      "prompt": "Verifique estrutura, recursos e itens não verificáveis deste curso.",
+      "should_trigger": true
+    },
+    {
+      "id": "moodle-classroom-audit-negative",
+      "skill": "moodle-classroom-audit",
+      "kind": "negative",
+      "prompt": "Liste meus cursos.",
+      "should_trigger": false
+    },
+    {
+      "id": "moodle-classroom-audit-edge",
+      "skill": "moodle-classroom-audit",
+      "kind": "edge",
+      "prompt": "Um módulo não pôde ser verificado; não o classifique como ausente.",
+      "should_trigger": true
+    }
+  ]
+}

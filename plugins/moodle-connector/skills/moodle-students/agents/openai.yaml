@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Estudantes"
+  short_description: "Resolva estudantes e grupos"
+  default_prompt: "Use $moodle-students para resolver estudantes, participantes e grupos sem misturar conexões."

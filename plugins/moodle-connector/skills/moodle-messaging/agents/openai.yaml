@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Mensagens"
+  short_description: "Redija e envie mensagens com confirmação"
+  default_prompt: "Use $moodle-messaging para redigir ou preparar mensagens e exigir confirmação antes do envio."

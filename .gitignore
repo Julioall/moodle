@@ -1,0 +1,63 @@
+## .NET / Visual Studio
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+
+## IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+## Test and coverage output
+[Tt]est[Rr]esult*/
+TestResults/
+CodeCoverage/
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+
+## NuGet / build metadata
+project.lock.json
+project.fragment.lock.json
+*.nupkg
+*.snupkg
+*.binlog
+[Bb]uild[Ll]og.*
+ScaffoldingReadMe.txt
+
+## Local configuration and secrets
+appsettings.Development.json
+.env
+.env.*
+!.env.example
+
+## Temporary files
+scratch/
+.worktrees/
+*.tmp
+*.log
+~$*
+*~
+
+## MoodleBench local outputs (regenerable; keep out of version control)
+.moodlebench/cognitive/
+.moodlebench/evidence/
+.superpowers/
+node_modules
+src/Moodle.Web/dist/
+public/Captura*.png
+public/pedagogic/*.md

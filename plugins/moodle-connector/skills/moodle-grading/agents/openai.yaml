@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Correção"
+  short_description: "Corrija e publique notas com segurança"
+  default_prompt: "Use $moodle-grading para corrigir submissões, inclusive por pacotes ZIP, e só publicar notas após prévia e confirmação."

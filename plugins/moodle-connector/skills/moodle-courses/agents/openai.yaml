@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Cursos"
+  short_description: "Localize e inspecione cursos"
+  default_prompt: "Use $moodle-courses para localizar o curso correto e inspecionar somente a estrutura necessária."
