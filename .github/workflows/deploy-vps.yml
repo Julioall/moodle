@@ -1,0 +1,854 @@
+name: CD - Deploy na VPS
+
+on:
+  workflow_run:
+    workflows:
+      - CI - Build, Testes e Qualidade
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps-moodle
+  # Never interrupt a remote deploy after it has started replacing services.
+  # A cancelled SSH step could otherwise leave the stack between down/up.
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: ${{ vars.DOTNET_VERSION || '10.0.x' }}
+  VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/moodle' }}
+  VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+  APP_PORT: ${{ vars.APP_PORT || '8787' }}
+  APP_DOMAIN: ${{ vars.APP_DOMAIN || secrets.APP_DOMAIN || '' }}
+  COMPOSE_PROFILES: ${{ vars.COMPOSE_PROFILES || 'https' }}
+  CADDYFILE: ${{ vars.CADDYFILE || './deploy/Caddyfile' }}
+  PUBLIC_READINESS_TIMEOUT_SECONDS: ${{ vars.PUBLIC_READINESS_TIMEOUT_SECONDS || '300' }}
+  PUBLIC_READINESS_RETRY_SECONDS: ${{ vars.PUBLIC_READINESS_RETRY_SECONDS || '10' }}
+  PUBLIC_ENDPOINT_FAILURE_MODE: ${{ vars.PUBLIC_ENDPOINT_FAILURE_MODE || 'fail' }}
+  MCP_REQUIRE_JWT: ${{ vars.MCP_REQUIRE_JWT || 'true' }}
+  MCP_REQUIRE_API_KEY: ${{ vars.MCP_REQUIRE_API_KEY || 'false' }}
+  FEATURES_MESSAGES_WRITE_ENABLED: ${{ vars.FEATURES_MESSAGES_WRITE_ENABLED || 'true' }}
+  FEATURES_COURSE_DETAILS_OVERVIEW_V1_ENABLED: 'true'
+  FEATURES_SCHEDULED_MESSAGES_ENABLED: ${{ vars.FEATURES_SCHEDULED_MESSAGES_ENABLED || 'false' }}
+  FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED: ${{ vars.FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED || 'true' }}
+  FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED: ${{ vars.FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED || 'true' }}
+  FEATURES_UNIVERSAL_MOODLE_WRITE_ENABLED: ${{ vars.FEATURES_UNIVERSAL_MOODLE_WRITE_ENABLED || 'false' }}
+  FEATURES_COURSE_CONTENT_WRITE_ENABLED: ${{ vars.FEATURES_COURSE_CONTENT_WRITE_ENABLED || 'false' }}
+  FEATURES_MCP_RESOURCE_SUBMISSION_DELIVERY_ENABLED: ${{ vars.FEATURES_MCP_RESOURCE_SUBMISSION_DELIVERY_ENABLED || 'true' }}
+  FEATURES_LEGACY_SUBMISSION_EXTRACTION_ENABLED: ${{ vars.FEATURES_LEGACY_SUBMISSION_EXTRACTION_ENABLED || 'false' }}
+  FEATURES_MCP_RESOURCE_ZIP_ENABLED: ${{ vars.FEATURES_MCP_RESOURCE_ZIP_ENABLED || 'false' }}
+  FEATURES_MCP_GRADING_DRAFT_ENABLED: ${{ vars.FEATURES_MCP_GRADING_DRAFT_ENABLED || 'true' }}
+  FEATURES_MCP_GRADING_WRITE_ENABLED: ${{ vars.FEATURES_MCP_GRADING_WRITE_ENABLED || 'true' }}
+  FEATURES_MCP_GRADING_SECURITY_WARNINGS_ONLY: ${{ vars.FEATURES_MCP_GRADING_SECURITY_WARNINGS_ONLY || 'true' }}
+  FEATURES_UNIVERSAL_MOODLE_FILE_DOWNLOAD_ENABLED: ${{ vars.FEATURES_UNIVERSAL_MOODLE_FILE_DOWNLOAD_ENABLED || 'true' }}
+  OAUTH_CLIENT_ID: ${{ vars.OAUTH_CLIENT_ID || 'moodle' }}
+  OAUTH_SCOPE_NAME: ${{ vars.OAUTH_SCOPE_NAME || 'moodle-mcp-audience' }}
+  OAUTH_REQUIRE_HTTPS_METADATA: ${{ vars.OAUTH_REQUIRE_HTTPS_METADATA || 'true' }}
+  OAUTH_ACCESS_TOKEN_MINUTES: ${{ vars.OAUTH_ACCESS_TOKEN_MINUTES || '60' }}
+  OAUTH_REFRESH_TOKEN_DAYS: ${{ vars.OAUTH_REFRESH_TOKEN_DAYS || '30' }}
+  OAUTH_KEY_STORAGE_PATH: ${{ vars.OAUTH_KEY_STORAGE_PATH || '/app/data/oauth' }}
+  OAUTH_CERTIFICATE_YEARS: ${{ vars.OAUTH_CERTIFICATE_YEARS || '5' }}
+  RATE_LIMIT_WINDOW_SECONDS: ${{ vars.RATE_LIMIT_WINDOW_SECONDS || '60' }}
+  RATE_LIMIT_APP_AUTH_PERMIT_LIMIT: ${{ vars.RATE_LIMIT_APP_AUTH_PERMIT_LIMIT || '12' }}
+  RATE_LIMIT_ACCOUNT_AUTH_PERMIT_LIMIT: ${{ vars.RATE_LIMIT_ACCOUNT_AUTH_PERMIT_LIMIT || '12' }}
+  RATE_LIMIT_ACCOUNT_AUTH_MAXIMUM_TRACKED_PARTITIONS: ${{ vars.RATE_LIMIT_ACCOUNT_AUTH_MAXIMUM_TRACKED_PARTITIONS || '10000' }}
+  RATE_LIMIT_ACCOUNT_AUTH_IDLE_EXPIRATION_MINUTES: ${{ vars.RATE_LIMIT_ACCOUNT_AUTH_IDLE_EXPIRATION_MINUTES || '30' }}
+  RATE_LIMIT_ADMIN_API_PERMIT_LIMIT: ${{ vars.RATE_LIMIT_ADMIN_API_PERMIT_LIMIT || '30' }}
+  RATE_LIMIT_MCP_PERMIT_LIMIT: ${{ vars.RATE_LIMIT_MCP_PERMIT_LIMIT || '120' }}
+  ADMISSION_INGRESS_MODE: ${{ vars.ADMISSION_INGRESS_MODE || 'Legacy' }}
+  ADMISSION_MOODLE_EGRESS_MODE: ${{ vars.ADMISSION_MOODLE_EGRESS_MODE || 'Legacy' }}
+  FORWARDED_HEADERS_KNOWN_NETWORK_0: ${{ vars.FORWARDED_HEADERS_KNOWN_NETWORK_0 || '172.16.0.0/12' }}
+  MOODLE_API_HTTP_TIMEOUT_SECONDS: ${{ vars.MOODLE_API_HTTP_TIMEOUT_SECONDS || '30' }}
+  MOODLE_API_HTTP_RETRY_COUNT: ${{ vars.MOODLE_API_HTTP_RETRY_COUNT || '4' }}
+  MOODLE_API_CIRCUIT_BREAKER_HANDLED_EVENTS: ${{ vars.MOODLE_API_CIRCUIT_BREAKER_HANDLED_EVENTS || '5' }}
+  MOODLE_API_CIRCUIT_BREAKER_DURATION_SECONDS: ${{ vars.MOODLE_API_CIRCUIT_BREAKER_DURATION_SECONDS || '30' }}
+  MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0: ${{ vars.MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0 || '' }}
+  MOODLE_PROXY_HTTP_TIMEOUT_SECONDS: ${{ vars.MOODLE_PROXY_HTTP_TIMEOUT_SECONDS || '30' }}
+  MOODLE_PROXY_HTTP_RETRY_COUNT: ${{ vars.MOODLE_PROXY_HTTP_RETRY_COUNT || '4' }}
+  MOODLE_PROXY_CIRCUIT_BREAKER_HANDLED_EVENTS: ${{ vars.MOODLE_PROXY_CIRCUIT_BREAKER_HANDLED_EVENTS || '5' }}
+  MOODLE_PROXY_CIRCUIT_BREAKER_DURATION_SECONDS: ${{ vars.MOODLE_PROXY_CIRCUIT_BREAKER_DURATION_SECONDS || '30' }}
+  POSTGRES_DB: ${{ vars.POSTGRES_DB || 'MOODLE' }}
+  POSTGRES_USER: ${{ vars.POSTGRES_USER || 'MOODLE' }}
+  COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'moodle' }}
+  # Never delete the production database by default. A reset must be explicitly enabled per environment.
+  RESET_DATABASE_ON_DEPLOY: ${{ vars.RESET_DATABASE_ON_DEPLOY || 'false' }}
+  VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY }}
+
+jobs:
+  deploy:
+    name: Sincronizar e reiniciar containers na VPS
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'master' &&
+       github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    environment: moodle
+    env:
+      REPORTS_TEMPLATES_ENABLED: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate VPS secrets
+        env:
+          OAUTH_ISSUER: ${{ vars.OAUTH_ISSUER || secrets.OAUTH_ISSUER || '' }}
+          OAUTH_AUDIENCE: ${{ vars.OAUTH_AUDIENCE || secrets.OAUTH_AUDIENCE || '' }}
+          OAUTH_CHATGPT_REDIRECT_URI: ${{ vars.OAUTH_CHATGPT_REDIRECT_URI || secrets.OAUTH_CHATGPT_REDIRECT_URI || '' }}
+          MOODLE_API_BASE_URL: ${{ secrets.MOODLE_API_BASE_URL }}
+          MOODLE_API_SERVICE_TOKEN: ${{ secrets.MOODLE_API_SERVICE_TOKEN }}
+          MOODLE_API_WRITE_SERVICE_TOKEN: ${{ secrets.MOODLE_API_WRITE_SERVICE_TOKEN }}
+          MOODLE_PROXY_BASE_URL: ${{ secrets.MOODLE_PROXY_BASE_URL }}
+          MOODLE_PROXY_API_KEY: ${{ secrets.MOODLE_PROXY_API_KEY }}
+          MEDIATR_LICENSE_KEY: ${{ secrets.MEDIATR_LICENSE_KEY }}
+          DIAGNOSTICS_DB_READER_PASSWORD: ${{ secrets.DIAGNOSTICS_DB_READER_PASSWORD }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+        run: |
+          has_newline() {
+            case "$1" in
+              *$'\n'*|*$'\r'*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          require_bool() {
+            case "$2" in
+              true|false) return 0 ;;
+              *) echo "::error::$1 must be true or false" && exit 1 ;;
+            esac
+          }
+
+          require_int_range() {
+            name="$1"
+            value="$2"
+            min="$3"
+            max="$4"
+
+            case "$value" in
+              ''|*[!0-9]*) echo "::error::$name must be an integer" && exit 1 ;;
+            esac
+
+            if [ "$value" -lt "$min" ] || [ "$value" -gt "$max" ]; then
+              echo "::error::$name must be between $min and $max"
+              exit 1
+            fi
+          }
+
+          require_hostname() {
+            case "$2" in
+              ''|*://*|*/*|*:*|*' '*) echo "::error::$1 must be a hostname without protocol, path or port" && exit 1 ;;
+            esac
+          }
+
+          python3 - "$POSTGRES_USER" "$POSTGRES_DB" <<'PY'
+          import re
+          import sys
+          for name, value in (("POSTGRES_USER", sys.argv[1]), ("POSTGRES_DB", sys.argv[2])):
+              if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,62}", value):
+                  print(f"::error::{name} must be a valid PostgreSQL identifier (1-63 ASCII letters, digits or underscores).")
+                  raise SystemExit(1)
+          if sys.argv[1] in {"MOODLE_app", "MOODLE_diag_reader", "moodle_diagnostics_operator"}:
+              print("::error::POSTGRES_USER must not collide with a reserved runtime or diagnostics role.")
+              raise SystemExit(1)
+          PY
+
+          test -n "${{ secrets.VPS_HOST }}" || (echo "::error::Configure VPS_HOST" && exit 1)
+          test -n "${{ secrets.VPS_USER }}" || (echo "::error::Configure VPS_USER" && exit 1)
+          test -n "$VPS_AUTH_SECRET" || (echo "::error::Configure VPS_SSH_KEY with a private key or SSH password" && exit 1)
+          if [ -z "$VPS_SSH_HOST_KEY" ] || [[ "$VPS_SSH_HOST_KEY" == *$'\n'* || "$VPS_SSH_HOST_KEY" == *$'\r'* ]]; then
+            echo "::error::Configure one verified VPS_SSH_HOST_KEY in the moodle environment."
+            exit 1
+          fi
+          ssh_host_pattern="$VPS_HOST"
+          if [ "$VPS_SSH_PORT" != "22" ]; then
+            ssh_host_pattern="[$VPS_HOST]:$VPS_SSH_PORT"
+          fi
+          printf '%s %s\n' "$ssh_host_pattern" "$VPS_SSH_HOST_KEY" > "$RUNNER_TEMP/moodle-diagnostics-known-hosts"
+          chmod 600 "$RUNNER_TEMP/moodle-diagnostics-known-hosts"
+          if ! ssh-keygen -lf "$RUNNER_TEMP/moodle-diagnostics-known-hosts" >/dev/null 2>&1 || ! ssh-keygen -F "$ssh_host_pattern" -f "$RUNNER_TEMP/moodle-diagnostics-known-hosts" >/dev/null 2>&1; then
+            echo "::error::VPS_SSH_HOST_KEY must be a valid OpenSSH public key for the configured VPS host and port."
+            exit 1
+          fi
+          test -n "${{ secrets.POSTGRES_PASSWORD }}" || (echo "::error::Configure POSTGRES_PASSWORD" && exit 1)
+          test -n "$DIAGNOSTICS_DB_READER_PASSWORD" || (echo "::error::Configure DIAGNOSTICS_DB_READER_PASSWORD in the moodle environment" && exit 1)
+          case "$DIAGNOSTICS_DB_READER_PASSWORD" in
+            *[!a-f0-9]*) echo "::error::DIAGNOSTICS_DB_READER_PASSWORD must be 64 lowercase hexadecimal characters (generate with openssl rand -hex 32)." && exit 1 ;;
+          esac
+          if [ "${#DIAGNOSTICS_DB_READER_PASSWORD}" -ne 64 ]; then
+            echo "::error::DIAGNOSTICS_DB_READER_PASSWORD must be 64 lowercase hexadecimal characters (generate with openssl rand -hex 32)."
+            exit 1
+          fi
+          test -n "${{ secrets.CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64 }}" || (echo "::error::Configure CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64" && exit 1)
+          test -n "${{ secrets.ADMIN_API_KEY }}" || (echo "::error::Configure ADMIN_API_KEY" && exit 1)
+          test -n "$MEDIATR_LICENSE_KEY" || (echo "::error::Configure MEDIATR_LICENSE_KEY" && exit 1)
+          test -n "$APP_DOMAIN" || (echo "::error::Configure APP_DOMAIN via variables or secrets" && exit 1)
+
+          require_hostname APP_DOMAIN "$APP_DOMAIN"
+
+          python3 - "$FORWARDED_HEADERS_KNOWN_NETWORK_0" <<'PY'
+          import ipaddress
+          import sys
+          try:
+              candidate = ipaddress.ip_network(sys.argv[1], strict=False)
+          except ValueError:
+              print("::error::FORWARDED_HEADERS_KNOWN_NETWORK_0 must be a valid IP network", file=sys.stderr)
+              raise SystemExit(1)
+          trusted_ranges = [
+              ipaddress.ip_network(value)
+              for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+                            "127.0.0.0/8", "fc00::/7", "fe80::/10", "::1/128")
+          ]
+          if not any(candidate.version == trusted.version and candidate.subnet_of(trusted) for trusted in trusted_ranges):
+              print("::error::Forwarded-header networks must be contained in a private or loopback range; use a proxy IP otherwise", file=sys.stderr)
+              raise SystemExit(1)
+          PY
+
+          require_bool MCP_REQUIRE_JWT "$MCP_REQUIRE_JWT"
+          require_bool MCP_REQUIRE_API_KEY "$MCP_REQUIRE_API_KEY"
+          require_bool REPORTS_TEMPLATES_ENABLED "$REPORTS_TEMPLATES_ENABLED"
+          require_bool FEATURES_MESSAGES_WRITE_ENABLED "$FEATURES_MESSAGES_WRITE_ENABLED"
+          require_bool FEATURES_SCHEDULED_MESSAGES_ENABLED "$FEATURES_SCHEDULED_MESSAGES_ENABLED"
+          require_bool FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED "$FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED"
+          require_bool FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED "$FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED"
+          require_bool FEATURES_UNIVERSAL_MOODLE_WRITE_ENABLED "$FEATURES_UNIVERSAL_MOODLE_WRITE_ENABLED"
+          require_bool FEATURES_COURSE_CONTENT_WRITE_ENABLED "$FEATURES_COURSE_CONTENT_WRITE_ENABLED"
+          require_bool FEATURES_MCP_RESOURCE_SUBMISSION_DELIVERY_ENABLED "$FEATURES_MCP_RESOURCE_SUBMISSION_DELIVERY_ENABLED"
+          require_bool FEATURES_LEGACY_SUBMISSION_EXTRACTION_ENABLED "$FEATURES_LEGACY_SUBMISSION_EXTRACTION_ENABLED"
+          require_bool FEATURES_MCP_RESOURCE_ZIP_ENABLED "$FEATURES_MCP_RESOURCE_ZIP_ENABLED"
+          require_bool FEATURES_MCP_GRADING_DRAFT_ENABLED "$FEATURES_MCP_GRADING_DRAFT_ENABLED"
+          require_bool FEATURES_MCP_GRADING_WRITE_ENABLED "$FEATURES_MCP_GRADING_WRITE_ENABLED"
+          require_bool FEATURES_MCP_GRADING_SECURITY_WARNINGS_ONLY "$FEATURES_MCP_GRADING_SECURITY_WARNINGS_ONLY"
+          require_bool FEATURES_UNIVERSAL_MOODLE_FILE_DOWNLOAD_ENABLED "$FEATURES_UNIVERSAL_MOODLE_FILE_DOWNLOAD_ENABLED"
+          require_bool RESET_DATABASE_ON_DEPLOY "$RESET_DATABASE_ON_DEPLOY"
+          require_bool OAUTH_REQUIRE_HTTPS_METADATA "$OAUTH_REQUIRE_HTTPS_METADATA"
+
+          case "$PUBLIC_ENDPOINT_FAILURE_MODE" in
+            fail|warn) ;;
+            *) echo "::error::PUBLIC_ENDPOINT_FAILURE_MODE must be fail or warn" && exit 1 ;;
+          esac
+
+          require_int_range PUBLIC_READINESS_TIMEOUT_SECONDS "$PUBLIC_READINESS_TIMEOUT_SECONDS" 30 1800
+          require_int_range PUBLIC_READINESS_RETRY_SECONDS "$PUBLIC_READINESS_RETRY_SECONDS" 2 60
+          require_int_range APP_PORT "$APP_PORT" 1 65535
+          require_int_range VPS_SSH_PORT "$VPS_SSH_PORT" 1 65535
+          require_int_range OAUTH_ACCESS_TOKEN_MINUTES "$OAUTH_ACCESS_TOKEN_MINUTES" 5 1440
+          require_int_range OAUTH_REFRESH_TOKEN_DAYS "$OAUTH_REFRESH_TOKEN_DAYS" 1 3650
+          require_int_range OAUTH_CERTIFICATE_YEARS "$OAUTH_CERTIFICATE_YEARS" 1 20
+          require_int_range RATE_LIMIT_WINDOW_SECONDS "$RATE_LIMIT_WINDOW_SECONDS" 1 3600
+          require_int_range RATE_LIMIT_APP_AUTH_PERMIT_LIMIT "$RATE_LIMIT_APP_AUTH_PERMIT_LIMIT" 1 1000
+          require_int_range RATE_LIMIT_ACCOUNT_AUTH_PERMIT_LIMIT "$RATE_LIMIT_ACCOUNT_AUTH_PERMIT_LIMIT" 1 1000
+          require_int_range RATE_LIMIT_ACCOUNT_AUTH_MAXIMUM_TRACKED_PARTITIONS "$RATE_LIMIT_ACCOUNT_AUTH_MAXIMUM_TRACKED_PARTITIONS" 1 100000
+          require_int_range RATE_LIMIT_ACCOUNT_AUTH_IDLE_EXPIRATION_MINUTES "$RATE_LIMIT_ACCOUNT_AUTH_IDLE_EXPIRATION_MINUTES" 1 1440
+          require_int_range RATE_LIMIT_ADMIN_API_PERMIT_LIMIT "$RATE_LIMIT_ADMIN_API_PERMIT_LIMIT" 1 1000
+          require_int_range RATE_LIMIT_MCP_PERMIT_LIMIT "$RATE_LIMIT_MCP_PERMIT_LIMIT" 1 10000
+
+          require_admission_mode() {
+            case "$2" in
+              Legacy|Observe) return 0 ;;
+              *) echo "::error::$1 must be Legacy or Observe until Enforce is implemented" && exit 1 ;;
+            esac
+          }
+
+          require_admission_mode ADMISSION_INGRESS_MODE "$ADMISSION_INGRESS_MODE"
+          require_admission_mode ADMISSION_MOODLE_EGRESS_MODE "$ADMISSION_MOODLE_EGRESS_MODE"
+          require_int_range MOODLE_API_HTTP_TIMEOUT_SECONDS "$MOODLE_API_HTTP_TIMEOUT_SECONDS" 1 300
+          require_int_range MOODLE_API_HTTP_RETRY_COUNT "$MOODLE_API_HTTP_RETRY_COUNT" 0 5
+          require_int_range MOODLE_API_CIRCUIT_BREAKER_HANDLED_EVENTS "$MOODLE_API_CIRCUIT_BREAKER_HANDLED_EVENTS" 0 50
+          require_int_range MOODLE_API_CIRCUIT_BREAKER_DURATION_SECONDS "$MOODLE_API_CIRCUIT_BREAKER_DURATION_SECONDS" 5 300
+          if [ -n "$MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0" ]; then
+            require_hostname MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0 "$MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0"
+          fi
+          require_int_range MOODLE_PROXY_HTTP_TIMEOUT_SECONDS "$MOODLE_PROXY_HTTP_TIMEOUT_SECONDS" 1 300
+          require_int_range MOODLE_PROXY_HTTP_RETRY_COUNT "$MOODLE_PROXY_HTTP_RETRY_COUNT" 0 5
+          require_int_range MOODLE_PROXY_CIRCUIT_BREAKER_HANDLED_EVENTS "$MOODLE_PROXY_CIRCUIT_BREAKER_HANDLED_EVENTS" 0 50
+          require_int_range MOODLE_PROXY_CIRCUIT_BREAKER_DURATION_SECONDS "$MOODLE_PROXY_CIRCUIT_BREAKER_DURATION_SECONDS" 5 300
+
+          key_bytes="$(printf '%s' "${{ secrets.CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64 }}" | base64 -d 2>/dev/null | wc -c | tr -d ' ')"
+          if [ "$key_bytes" != "32" ]; then
+            echo "::error::CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64 must decode to exactly 32 bytes."
+            exit 1
+          fi
+
+          if [ "$MCP_REQUIRE_JWT" = "true" ]; then
+            if [ -z "$APP_DOMAIN" ] && { [ -z "$OAUTH_ISSUER" ] || [ -z "$OAUTH_AUDIENCE" ]; }; then
+              echo "::error::Configure APP_DOMAIN or both OAUTH_ISSUER and OAUTH_AUDIENCE when MCP_REQUIRE_JWT=true."
+              exit 1
+            fi
+
+          fi
+
+          if [ "$OAUTH_REQUIRE_HTTPS_METADATA" = "true" ]; then
+            if [ -n "$OAUTH_ISSUER" ] && ! printf '%s' "$OAUTH_ISSUER" | grep -q '^https://'; then
+              echo "::error::OAUTH_ISSUER must use https:// when OAUTH_REQUIRE_HTTPS_METADATA=true."
+              exit 1
+            fi
+
+            if [ -n "$OAUTH_AUDIENCE" ] && ! printf '%s' "$OAUTH_AUDIENCE" | grep -q '^https://'; then
+              echo "::error::OAUTH_AUDIENCE must use https:// when OAUTH_REQUIRE_HTTPS_METADATA=true."
+              exit 1
+            fi
+
+            if [ -n "$OAUTH_CHATGPT_REDIRECT_URI" ] && ! printf '%s' "$OAUTH_CHATGPT_REDIRECT_URI" | grep -q '^https://'; then
+              echo "::error::OAUTH_CHATGPT_REDIRECT_URI must use https:// when OAUTH_REQUIRE_HTTPS_METADATA=true."
+              exit 1
+            fi
+          fi
+
+          if [ "$MCP_REQUIRE_JWT" != "true" ] && [ "$MCP_REQUIRE_API_KEY" != "true" ]; then
+            echo "::error::At least one auth method must be enabled (MCP_REQUIRE_JWT or MCP_REQUIRE_API_KEY)."
+            exit 1
+          fi
+
+          for value in \
+            "$APP_DOMAIN" \
+            "$OAUTH_ISSUER" \
+            "$OAUTH_AUDIENCE" \
+            "$OAUTH_CHATGPT_REDIRECT_URI" \
+            "$MOODLE_API_BASE_URL" \
+            "$MOODLE_API_SERVICE_TOKEN" \
+            "$MOODLE_API_WRITE_SERVICE_TOKEN" \
+            "$MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0" \
+            "$MOODLE_PROXY_BASE_URL" \
+            "$MOODLE_PROXY_API_KEY" \
+            "${{ secrets.POSTGRES_PASSWORD }}" \
+            "$DIAGNOSTICS_DB_READER_PASSWORD" \
+            "${{ secrets.CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64 }}" \
+            "${{ secrets.ADMIN_API_KEY }}" \
+            "$MEDIATR_LICENSE_KEY"
+          do
+            if has_newline "$value"; then
+              echo "::error::Secrets and deploy variables must not contain line breaks."
+              exit 1
+            fi
+          done
+
+      - name: Validate delivery files
+        run: |
+          python scripts/check-dockerfile-encoding.py
+          bash -n scripts/check-public-readiness.sh
+
+      - name: Validate Docker Compose configuration
+        env:
+          ENV_FILE: .env.example
+          APP_ENV_FILE: .env.example
+          CADDY_ENV_FILE: .env.example
+          POSTGRES_PASSWORD: ci-compose-validation-password
+        run: |
+          docker compose --project-directory . -f deploy/docker-compose.yml --profile https --profile migration config --quiet
+          docker compose --project-directory . -f deploy/docker-compose.yml --profile https --profile migration config --format json | python -c "import json, sys; services = json.load(sys.stdin)['services']; app = services['app']; ports = app['ports']; env = app['environment']; migration = services['migration']['environment']; expected_logging = {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '5'}}; assert any(port.get('host_ip') == '127.0.0.1' and port.get('target') == 8080 for port in ports), 'app must bind only to 127.0.0.1'; assert env.get('GradingLimits__GradingPackageBlobRootDirectory') == '/app/data/private-grading-packages', 'grading package blobs must use persistent app-data storage'; assert migration.get('Schema__MigrationOnly') == 'true' and migration.get('Schema__ApplyOnStartup') == 'true', 'migration service must be one-shot and apply schema'; assert all(services[name].get('logging') == expected_logging for name in ('app', 'postgres', 'caddy', 'migration')), 'all services must use bounded json-file log rotation (10 MiB x 5 files)'"
+
+      - name: Validate Caddy topology
+        run: docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -e APP_DOMAIN=moodle.localhost caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Configure SSH auth
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cp "$RUNNER_TEMP/moodle-diagnostics-known-hosts" ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          if printf '%s' "$VPS_AUTH_SECRET" | grep -q "BEGIN .*PRIVATE KEY"; then
+            printf '%s\n' "$VPS_AUTH_SECRET" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            echo "VPS_AUTH_MODE=key" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y sshpass
+            echo "VPS_AUTH_MODE=password" >> "$GITHUB_ENV"
+          fi
+
+      - name: Prepare remote host
+        run: |
+          REMOTE_PREPARE="set -euo pipefail
+            SUDO=''
+            if [ \"\$(id -u)\" -ne 0 ]; then SUDO='sudo'; fi
+
+            fix_docker_repo_for_debian() {
+              if [ ! -r /etc/os-release ]; then
+                return 0
+              fi
+
+              . /etc/os-release
+              if [ \"\${ID:-}\" != 'debian' ]; then
+                return 0
+              fi
+
+              changed=0
+              for apt_list in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+                [ -f \"\$apt_list\" ] || continue
+
+                if grep -q 'download.docker.com/linux/ubuntu' \"\$apt_list\"; then
+                  echo \"Fixing Docker APT repository distro in \$apt_list (ubuntu -> debian)\"
+                  \$SUDO sed -i 's#download.docker.com/linux/ubuntu#download.docker.com/linux/debian#g' \"\$apt_list\"
+                  changed=1
+                fi
+
+                if grep -Eq 'download\\.docker\\.com/linux/(ubuntu|debian)[[:space:]]+trixie([[:space:]]|\$)' \"\$apt_list\"; then
+                  echo \"Fixing Docker APT repository codename in \$apt_list (trixie -> bookworm)\"
+                  \$SUDO sed -E -i 's#(download\\.docker\\.com/linux/(ubuntu|debian)[[:space:]]+)trixie([[:space:]]|\$)#\\1bookworm\\3#g' \"\$apt_list\"
+                  changed=1
+                fi
+              done
+
+              if [ \"\$changed\" -eq 1 ]; then
+                echo 'Docker APT repository configuration adjusted for Debian compatibility'
+              fi
+            }
+
+            apt_update_safe() {
+              if \$SUDO apt-get update; then
+                return 0
+              fi
+
+              fix_docker_repo_for_debian
+              if \$SUDO apt-get update; then
+                return 0
+              fi
+
+              return 1
+            }
+
+            if ! command -v rsync >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                apt_update_safe
+                \$SUDO apt-get install -y rsync curl ca-certificates
+              else
+                echo 'rsync is required on the VPS'
+                exit 1
+              fi
+            fi
+
+            if ! command -v curl >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                apt_update_safe
+                \$SUDO apt-get install -y curl ca-certificates
+              else
+                echo 'curl is required on the VPS'
+                exit 1
+              fi
+            fi
+
+            if ! command -v docker >/dev/null 2>&1; then
+              fix_docker_repo_for_debian
+              curl -fsSL https://get.docker.com | \$SUDO sh
+            fi
+
+            if ! docker compose version >/dev/null 2>&1; then
+              echo 'Docker Compose plugin is required on the VPS'
+              exit 1
+            fi
+
+            \$SUDO mkdir -p '$VPS_APP_DIR'
+            \$SUDO chown -R '${{ secrets.VPS_USER }}': '$VPS_APP_DIR'"
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            ssh -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$REMOTE_PREPARE"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" ssh -p "$VPS_SSH_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$REMOTE_PREPARE"
+          fi
+
+      - name: Sync repository to VPS
+        run: |
+          RSYNC_EXCLUDES=(
+            --exclude ".git/"
+            --exclude ".github/"
+            --exclude ".vs/"
+            --exclude ".vscode/"
+            --exclude "**/bin/"
+            --exclude "**/obj/"
+            --exclude "publish/"
+            --exclude "TestResults/"
+            --exclude ".env"
+            --exclude ".env.*"
+            --exclude "**/node_modules/"
+            --exclude "**/dist/"
+          )
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p $VPS_SSH_PORT" \
+              "${RSYNC_EXCLUDES[@]}" ./ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" rsync -az --delete -e "ssh -p $VPS_SSH_PORT" \
+              "${RSYNC_EXCLUDES[@]}" ./ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/"
+          fi
+
+      - name: Write production env
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          DIAGNOSTICS_DB_READER_PASSWORD: ${{ secrets.DIAGNOSTICS_DB_READER_PASSWORD }}
+          CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64: ${{ secrets.CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64 }}
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          MEDIATR_LICENSE_KEY: ${{ secrets.MEDIATR_LICENSE_KEY }}
+          MOODLE_API_BASE_URL: ${{ secrets.MOODLE_API_BASE_URL }}
+          MOODLE_API_SERVICE_TOKEN: ${{ secrets.MOODLE_API_SERVICE_TOKEN }}
+          MOODLE_API_WRITE_SERVICE_TOKEN: ${{ secrets.MOODLE_API_WRITE_SERVICE_TOKEN }}
+          MOODLE_PROXY_BASE_URL: ${{ secrets.MOODLE_PROXY_BASE_URL }}
+          MOODLE_PROXY_API_KEY: ${{ secrets.MOODLE_PROXY_API_KEY }}
+          OAUTH_ISSUER: ${{ vars.OAUTH_ISSUER || secrets.OAUTH_ISSUER || '' }}
+          OAUTH_AUDIENCE: ${{ vars.OAUTH_AUDIENCE || secrets.OAUTH_AUDIENCE || '' }}
+          OAUTH_CHATGPT_REDIRECT_URI: ${{ vars.OAUTH_CHATGPT_REDIRECT_URI || secrets.OAUTH_CHATGPT_REDIRECT_URI || '' }}
+        run: |
+          umask 077
+          ENV_FILE="$(mktemp)"
+          APP_ENV_FILE_TMP="$(mktemp)"
+          CADDY_ENV_FILE_TMP="$(mktemp)"
+          OAUTH_ISSUER_EFFECTIVE="${OAUTH_ISSUER:-https://$APP_DOMAIN}"
+          OAUTH_AUDIENCE_EFFECTIVE="${OAUTH_AUDIENCE:-https://$APP_DOMAIN/mcp}"
+          CONNECTION_STRING="Host=postgres;Port=5432;Database=$POSTGRES_DB;Username=$POSTGRES_USER;Password=$POSTGRES_PASSWORD"
+          APP_ROLE_PASSWORD="$(python3 - <<'PY'
+          import hashlib
+          import hmac
+          import os
+          key = os.environ["POSTGRES_PASSWORD"].encode()
+          print(hmac.new(key, b"moodle-app-role-v1", hashlib.sha256).hexdigest())
+          PY
+          )"
+          APP_CONNECTION_STRING="Host=postgres;Port=5432;Database=$POSTGRES_DB;Username=MOODLE_app;Password=$APP_ROLE_PASSWORD"
+          DEPLOY_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BUILD_ID="${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          RELEASE_VERSION=""
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            RELEASE_VERSION="$GITHUB_REF_NAME"
+          fi
+
+          {
+            printf 'APP_PORT=%s\n' "$APP_PORT"
+            printf 'APP_ENV_FILE=.env.app\n'
+            printf 'CADDY_ENV_FILE=.env.caddy\n'
+            printf 'GIT_COMMIT=%s\n' "$GITHUB_SHA"
+            printf 'BUILD_DATE=%s\n' "$DEPLOY_TIMESTAMP"
+            printf 'MOODLE_VERSION=%s\n' "$RELEASE_VERSION"
+            printf 'MOODLE_COMMIT=%s\n' "$GITHUB_SHA"
+            printf 'MOODLE_BUILD_ID=%s\n' "$BUILD_ID"
+            printf 'MOODLE_BUILD_AT=%s\n' "$DEPLOY_TIMESTAMP"
+            printf 'MOODLE_DEPLOYED_AT=%s\n' "$DEPLOY_TIMESTAMP"
+            printf 'MOODLE_SOURCE_REF=%s\n' "$GITHUB_REF_NAME"
+            printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN"
+            printf 'COMPOSE_PROFILES=%s\n' "$COMPOSE_PROFILES"
+            printf 'CADDYFILE=%s\n' "$CADDYFILE"
+            printf 'POSTGRES_DB=%s\n' "$POSTGRES_DB"
+            printf 'POSTGRES_USER=%s\n' "$POSTGRES_USER"
+            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+            printf 'APP_ROLE_PASSWORD=%s\n' "$APP_ROLE_PASSWORD"
+            printf 'DIAGNOSTICS_DB_READER_PASSWORD=%s\n' "$DIAGNOSTICS_DB_READER_PASSWORD"
+            printf 'Postgres__ConnectionString=%s\n' "$CONNECTION_STRING"
+            printf 'GRADING_PACKAGE_BLOB_ROOT_DIRECTORY=/app/data/private-grading-packages\n'
+            # docker-compose interpolation reads this uppercase key before it
+            # loads env_file; keep it aligned with the service environment map.
+            printf 'CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64=%s\n' "$CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64"
+            printf 'ConnectorSecrets__EncryptionKeyBase64=%s\n' "$CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64"
+            printf 'AdminApi__ApiKey=%s\n' "$ADMIN_API_KEY"
+            printf 'MEDIATR_LICENSE_KEY=%s\n' "$MEDIATR_LICENSE_KEY"
+            printf 'Features__AppV2Enabled=true\n'
+            printf 'Features__CourseDetailsOverviewV1Enabled=%s\n' "$FEATURES_COURSE_DETAILS_OVERVIEW_V1_ENABLED"
+            printf 'Reports__TemplatesEnabled=%s\n' "$REPORTS_TEMPLATES_ENABLED"
+            printf 'FEATURES_MESSAGES_WRITE_ENABLED=%s\n' "$FEATURES_MESSAGES_WRITE_ENABLED"
+            printf 'Features__ScheduledMessagesEnabled=%s\n' "$FEATURES_SCHEDULED_MESSAGES_ENABLED"
+            printf 'FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED=%s\n' "$FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED"
+            printf 'FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED=%s\n' "$FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED"
+            printf 'Features__UniversalMoodleWriteEnabled=%s\n' "$FEATURES_UNIVERSAL_MOODLE_WRITE_ENABLED"
+            printf 'Features__CourseContentWriteEnabled=%s\n' "$FEATURES_COURSE_CONTENT_WRITE_ENABLED"
+            printf 'Features__McpResourceSubmissionDeliveryEnabled=%s\n' "$FEATURES_MCP_RESOURCE_SUBMISSION_DELIVERY_ENABLED"
+            printf 'Features__LegacySubmissionExtractionEnabled=%s\n' "$FEATURES_LEGACY_SUBMISSION_EXTRACTION_ENABLED"
+            printf 'Features__McpResourceZipEnabled=%s\n' "$FEATURES_MCP_RESOURCE_ZIP_ENABLED"
+            printf 'Features__McpGradingDraftEnabled=%s\n' "$FEATURES_MCP_GRADING_DRAFT_ENABLED"
+            printf 'Features__McpGradingWriteEnabled=%s\n' "$FEATURES_MCP_GRADING_WRITE_ENABLED"
+            printf 'Features__McpGradingSecurityWarningsOnly=%s\n' "$FEATURES_MCP_GRADING_SECURITY_WARNINGS_ONLY"
+            printf 'Features__UniversalMoodleFileDownloadEnabled=%s\n' "$FEATURES_UNIVERSAL_MOODLE_FILE_DOWNLOAD_ENABLED"
+            printf 'Features__DemoToolsEnabled=false\n'
+            printf 'McpServerSecurity__RequireJwt=%s\n' "$MCP_REQUIRE_JWT"
+            printf 'McpServerSecurity__RequireApiKey=%s\n' "$MCP_REQUIRE_API_KEY"
+            printf 'OAuth__Issuer=%s\n' "$OAUTH_ISSUER_EFFECTIVE"
+            printf 'OAuth__Audience=%s\n' "$OAUTH_AUDIENCE_EFFECTIVE"
+            printf 'OAuth__ChatGptClientId=%s\n' "$OAUTH_CLIENT_ID"
+            printf 'OAuth__ChatGptRedirectUri=%s\n' "$OAUTH_CHATGPT_REDIRECT_URI"
+            printf 'OAuth__ScopeName=%s\n' "$OAUTH_SCOPE_NAME"
+            printf 'OAuth__RequireHttpsMetadata=%s\n' "$OAUTH_REQUIRE_HTTPS_METADATA"
+            printf 'OAuth__AccessTokenMinutes=%s\n' "$OAUTH_ACCESS_TOKEN_MINUTES"
+            printf 'OAuth__RefreshTokenDays=%s\n' "$OAUTH_REFRESH_TOKEN_DAYS"
+            printf 'OAuth__KeyStoragePath=%s\n' "$OAUTH_KEY_STORAGE_PATH"
+            printf 'OAuth__CertificateYears=%s\n' "$OAUTH_CERTIFICATE_YEARS"
+            printf 'RateLimiting__WindowSeconds=%s\n' "$RATE_LIMIT_WINDOW_SECONDS"
+            printf 'RateLimiting__AppAuthPermitLimit=%s\n' "$RATE_LIMIT_APP_AUTH_PERMIT_LIMIT"
+            printf 'RateLimiting__AccountAuthPermitLimit=%s\n' "$RATE_LIMIT_ACCOUNT_AUTH_PERMIT_LIMIT"
+            printf 'RateLimiting__AccountAuthMaximumTrackedPartitions=%s\n' "$RATE_LIMIT_ACCOUNT_AUTH_MAXIMUM_TRACKED_PARTITIONS"
+            printf 'RateLimiting__AccountAuthIdleExpirationMinutes=%s\n' "$RATE_LIMIT_ACCOUNT_AUTH_IDLE_EXPIRATION_MINUTES"
+            printf 'RateLimiting__AdminApiPermitLimit=%s\n' "$RATE_LIMIT_ADMIN_API_PERMIT_LIMIT"
+            printf 'RateLimiting__McpPermitLimit=%s\n' "$RATE_LIMIT_MCP_PERMIT_LIMIT"
+            printf 'Admission__IngressMode=%s\n' "$ADMISSION_INGRESS_MODE"
+            printf 'Admission__MoodleEgressMode=%s\n' "$ADMISSION_MOODLE_EGRESS_MODE"
+            printf 'ForwardedHeaders__KnownNetworks__0=%s\n' "$FORWARDED_HEADERS_KNOWN_NETWORK_0"
+            printf 'MoodleApi__BaseUrl=%s\n' "$MOODLE_API_BASE_URL"
+            printf 'MoodleApi__ServiceToken=%s\n' "$MOODLE_API_SERVICE_TOKEN"
+            printf 'MoodleApi__WriteServiceToken=%s\n' "$MOODLE_API_WRITE_SERVICE_TOKEN"
+            printf 'MoodleApi__TrustedPrivateEndpointHosts__0=%s\n' "$MOODLE_API_TRUSTED_PRIVATE_ENDPOINT_HOST_0"
+            printf 'MoodleApi__UseStubData=false\n'
+            printf 'MoodleApi__HttpTimeoutSeconds=%s\n' "$MOODLE_API_HTTP_TIMEOUT_SECONDS"
+            printf 'MoodleApi__HttpRetryCount=%s\n' "$MOODLE_API_HTTP_RETRY_COUNT"
+            printf 'MoodleApi__CircuitBreakerHandledEventsAllowedBeforeBreaking=%s\n' "$MOODLE_API_CIRCUIT_BREAKER_HANDLED_EVENTS"
+            printf 'MoodleApi__CircuitBreakerDurationSeconds=%s\n' "$MOODLE_API_CIRCUIT_BREAKER_DURATION_SECONDS"
+            printf 'MoodleProxy__BaseUrl=%s\n' "$MOODLE_PROXY_BASE_URL"
+            printf 'MoodleProxy__ApiKey=%s\n' "$MOODLE_PROXY_API_KEY"
+            printf 'MoodleProxy__UseStubData=false\n'
+            printf 'MoodleProxy__HttpTimeoutSeconds=%s\n' "$MOODLE_PROXY_HTTP_TIMEOUT_SECONDS"
+            printf 'MoodleProxy__HttpRetryCount=%s\n' "$MOODLE_PROXY_HTTP_RETRY_COUNT"
+            printf 'MoodleProxy__CircuitBreakerHandledEventsAllowedBeforeBreaking=%s\n' "$MOODLE_PROXY_CIRCUIT_BREAKER_HANDLED_EVENTS"
+            printf 'MoodleProxy__CircuitBreakerDurationSeconds=%s\n' "$MOODLE_PROXY_CIRCUIT_BREAKER_DURATION_SECONDS"
+          } > "$ENV_FILE"
+
+          awk -F= '$1 != "POSTGRES_USER" && $1 != "POSTGRES_PASSWORD" && $1 != "APP_ROLE_PASSWORD" && $1 != "DIAGNOSTICS_DB_READER_PASSWORD" && $1 != "Postgres__ConnectionString"' \
+            "$ENV_FILE" > "$APP_ENV_FILE_TMP"
+          {
+            printf 'Postgres__ConnectionString=%s\n' "$APP_CONNECTION_STRING"
+            printf 'Schema__ApplyOnStartup=false\n'
+            printf 'Schema__MigrationOnly=false\n'
+          } >> "$APP_ENV_FILE_TMP"
+          printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN" > "$CADDY_ENV_FILE_TMP"
+          chmod 600 "$ENV_FILE" "$APP_ENV_FILE_TMP" "$CADDY_ENV_FILE_TMP"
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            scp -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$ENV_FILE" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/.env.production"
+            scp -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$APP_ENV_FILE_TMP" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/.env.app"
+            scp -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$CADDY_ENV_FILE_TMP" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/.env.caddy"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" scp -P "$VPS_SSH_PORT" "$ENV_FILE" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/.env.production"
+            sshpass -p "$VPS_AUTH_SECRET" scp -P "$VPS_SSH_PORT" "$APP_ENV_FILE_TMP" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/.env.app"
+            sshpass -p "$VPS_AUTH_SECRET" scp -P "$VPS_SSH_PORT" "$CADDY_ENV_FILE_TMP" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_APP_DIR/.env.caddy"
+          fi
+
+          rm -f "$ENV_FILE" "$APP_ENV_FILE_TMP" "$CADDY_ENV_FILE_TMP"
+
+      - name: Build and restart containers
+        timeout-minutes: 35
+        run: |
+          REMOTE_SCRIPT="$(cat <<EOF
+          set -euo pipefail
+          cd '$VPS_APP_DIR'
+          export COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME'
+          DOCKER='docker'
+          if ! docker info >/dev/null 2>&1; then
+            DOCKER='sudo docker'
+          fi
+
+          if [ '$RESET_DATABASE_ON_DEPLOY' = 'true' ]; then
+            echo 'Development data policy: resetting the PostgreSQL volume before deploy.'
+            \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production down --remove-orphans || true
+            DB_VOLUMES="\$(\$DOCKER volume ls -q --filter label=com.docker.compose.project='$COMPOSE_PROJECT_NAME' --filter label=com.docker.compose.volume=postgres-data)"
+            if [ -z "\$DB_VOLUMES" ]; then
+              DB_VOLUMES="'$COMPOSE_PROJECT_NAME'_postgres-data"
+            fi
+            for DB_VOLUME in \$DB_VOLUMES; do
+              \$DOCKER volume rm "\$DB_VOLUME" >/dev/null 2>&1 || true
+            done
+          fi
+          diagnose_docker_registry() {
+            echo 'Docker registry connectivity diagnostics:'
+            for host in auth.docker.io registry-1.docker.io; do
+              echo "=== \$host ==="
+              getent ahosts "\$host" || true
+            done
+
+            curl -4 --silent --show-error --output /dev/null \
+              --write-out 'auth.docker.io IPv4 HTTP=%{http_code}\n' \
+              --connect-timeout 10 --max-time 20 \
+              https://auth.docker.io/token || true
+            curl -4 --silent --show-error --output /dev/null \
+              --write-out 'registry-1.docker.io IPv4 HTTP=%{http_code}\n' \
+              --connect-timeout 10 --max-time 20 \
+              https://registry-1.docker.io/v2/ || true
+          }
+
+          # Build first and only replace containers after a complete image build.
+          # This keeps the currently healthy stack online during transient registry
+          # or DNS/TLS failures while BuildKit is resolving Docker Hub images.
+          diagnose_docker_registry
+          BUILD_OK=0
+          for attempt in 1 2 3 4; do
+            echo "Docker build attempt \$attempt/4..."
+            if timeout 1800s \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production build; then
+              BUILD_OK=1
+              break
+            fi
+
+            echo "Docker build failed on attempt \$attempt/4."
+            diagnose_docker_registry
+            if [ "\$attempt" -lt 4 ]; then
+              RETRY_DELAY=\$((attempt * 15))
+              echo "Retrying Docker build in \${RETRY_DELAY}s..."
+              sleep "\$RETRY_DELAY"
+            fi
+          done
+
+          if [ "\$BUILD_OK" -ne 1 ]; then
+            echo 'Docker build failed after 4 attempts. Existing stack was left untouched.'
+            \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production ps || true
+            exit 1
+          fi
+
+          chmod 600 .env.production .env.app .env.caddy
+          read_env_value() {
+            python3 - "\$1" .env.production <<'PY'
+          import sys
+          key, path = sys.argv[1], sys.argv[2]
+          with open(path, encoding="utf-8") as env_file:
+              for line in env_file:
+                  name, separator, value = line.rstrip("\n").partition("=")
+                  if separator and name == key:
+                      print(value, end="")
+                      raise SystemExit(0)
+          raise SystemExit(f"Missing required deploy setting: {key}")
+          PY
+          }
+          POSTGRES_USER="\$(read_env_value POSTGRES_USER)"
+          POSTGRES_DB="\$(read_env_value POSTGRES_DB)"
+          APP_ROLE_PASSWORD="\$(read_env_value APP_ROLE_PASSWORD)"
+          DIAGNOSTICS_DB_READER_PASSWORD="\$(read_env_value DIAGNOSTICS_DB_READER_PASSWORD)"
+          case "\$APP_ROLE_PASSWORD" in
+            ''|*[!a-f0-9]*) echo 'Invalid derived runtime database password.'; exit 1 ;;
+          esac
+          case "\$DIAGNOSTICS_DB_READER_PASSWORD" in
+            *[!a-f0-9]*) echo 'Invalid diagnostics reader database password.'; exit 1 ;;
+          esac
+          if [ "\${#DIAGNOSTICS_DB_READER_PASSWORD}" -ne 64 ]; then
+            echo 'Invalid diagnostics reader database password length.'
+            exit 1
+          fi
+
+          # Start only PostgreSQL first. The old application remains healthy while
+          # the new image and schema are prepared.
+          \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production up -d postgres
+          POSTGRES_READY=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            if \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production exec -T postgres \
+              pg_isready -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" >/dev/null 2>&1; then
+              POSTGRES_READY=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "\$POSTGRES_READY" -ne 1 ]; then
+            echo 'PostgreSQL did not become ready; application containers were not replaced.'
+            exit 1
+          fi
+
+          # Provision the non-administrative runtime role and future-object
+          # grants. The derived password is sent only to psql stdin, never argv.
+          \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production exec -T postgres \
+            psql -v ON_ERROR_STOP=1 -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" <<SQL
+          SELECT format('CREATE ROLE MOODLE_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', '\$APP_ROLE_PASSWORD')
+          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'MOODLE_app') \\gexec
+          ALTER ROLE MOODLE_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '\$APP_ROLE_PASSWORD';
+          SELECT format('CREATE ROLE MOODLE_diag_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT')
+          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'MOODLE_diag_reader') \\gexec
+          ALTER ROLE MOODLE_diag_reader WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+          SELECT format('CREATE ROLE moodle_diagnostics_operator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS PASSWORD %L', '\$DIAGNOSTICS_DB_READER_PASSWORD')
+          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'moodle_diagnostics_operator') \\gexec
+          ALTER ROLE moodle_diagnostics_operator WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS PASSWORD '\$DIAGNOSTICS_DB_READER_PASSWORD';
+          GRANT MOODLE_diag_reader TO moodle_diagnostics_operator;
+          SELECT format('GRANT CONNECT ON DATABASE %I TO MOODLE_app', current_database()) \\gexec
+          GRANT USAGE ON SCHEMA public TO MOODLE_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO MOODLE_app;
+          GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO MOODLE_app;
+          ALTER DEFAULT PRIVILEGES FOR ROLE "\$POSTGRES_USER" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO MOODLE_app;
+          ALTER DEFAULT PRIVILEGES FOR ROLE "\$POSTGRES_USER" IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO MOODLE_app;
+          SQL
+
+          if ! timeout 600s \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production \
+            run --rm --no-deps migration; then
+            echo 'One-shot schema migration failed; the running application was not replaced.'
+            exit 1
+          fi
+
+          \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production exec -T postgres \
+            psql -v ON_ERROR_STOP=1 -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" <<SQL
+          SELECT format('GRANT CONNECT ON DATABASE %I TO MOODLE_diag_reader', current_database()) \\gexec
+          GRANT USAGE ON SCHEMA public TO MOODLE_diag_reader;
+          GRANT SELECT ON moodle_call_diagnostics TO MOODLE_diag_reader;
+          GRANT SELECT ON moodle_call_diagnostic_payloads TO MOODLE_diag_reader;
+          GRANT SELECT ON MOODLE_schema_versions TO MOODLE_diag_reader;
+          REVOKE SELECT, UPDATE ON moodle_call_diagnostic_payloads FROM MOODLE_app;
+          GRANT INSERT, DELETE ON moodle_call_diagnostic_payloads TO MOODLE_app;
+          SQL
+
+          # The build completed successfully; Compose can now recreate only the
+          # services that changed without rebuilding and without a pre-emptive down.
+          if ! timeout 600s \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production up -d --remove-orphans; then
+            echo 'Container startup failed after a successful image build. Recent compose status and logs:'
+            \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production ps || true
+            \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production logs --tail=200 app postgres caddy || true
+            exit 1
+          fi
+          \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production ps
+          \$DOCKER image prune -f
+
+          sleep 5
+          curl --fail --show-error --silent http://127.0.0.1:$APP_PORT/health
+          if [ -n '$APP_DOMAIN' ] && printf '%s' '$COMPOSE_PROFILES' | grep -Eq '(^|,)https(,|$)'; then
+            echo "Waiting for public endpoint readiness for $APP_DOMAIN..."
+            if ! bash ./scripts/check-public-readiness.sh '$APP_DOMAIN' '$PUBLIC_READINESS_TIMEOUT_SECONDS' '$PUBLIC_READINESS_RETRY_SECONDS'; then
+              echo "Public DNS/HTTPS readiness did not stabilize. Recent Caddy logs:"
+              \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production logs --tail=160 caddy || true
+
+              if [ '$PUBLIC_ENDPOINT_FAILURE_MODE' = 'warn' ]; then
+                echo "::warning::Application containers are healthy, but the public endpoint is not ready. PUBLIC_ENDPOINT_FAILURE_MODE=warn keeps this deployment non-blocking."
+              else
+                echo "::error::Application containers are healthy, but the public endpoint is not ready."
+                exit 1
+              fi
+            fi
+          fi
+          EOF
+          )"
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            ssh -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$REMOTE_SCRIPT"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" ssh -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -p "$VPS_SSH_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$REMOTE_SCRIPT"
+          fi
+
+      - name: Verify deployed public contract
+        shell: bash
+        run: |
+          PUBLIC_CONTRACT_OK=0
+
+          for attempt in 1 2 3; do
+            if pwsh -NoProfile -File ./scripts/verify-production-endpoint.ps1 \
+              -AppDomain "$APP_DOMAIN" \
+              -ExpectedGitCommit "$GITHUB_SHA" \
+              -RequireStrictTransportSecurity \
+              -RequireGradingPackageTransport; then
+              PUBLIC_CONTRACT_OK=1
+              break
+            fi
+
+            echo "Public contract verification failed on attempt $attempt/3."
+            if [ "$attempt" -lt 3 ]; then
+              sleep 15
+            fi
+          done
+
+          if [ "$PUBLIC_CONTRACT_OK" -ne 1 ]; then
+            if [ "$PUBLIC_ENDPOINT_FAILURE_MODE" = "warn" ]; then
+              echo "::warning::Public contract could not be verified after retries. Application containers remain healthy."
+              exit 0
+            fi
+
+            echo "::error::Public contract verification failed after retries."
+            exit 1
+          fi

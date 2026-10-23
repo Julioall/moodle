@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!--
+    PostgreSQL integration fixtures initialize a shared schema. Keep this
+    gate deterministic: xUnit collections must not initialize that schema in
+    parallel on a fresh database.
+  -->
+  <xUnit>
+    <parallelizeTestCollections>false</parallelizeTestCollections>
+    <maxParallelThreads>1</maxParallelThreads>
+  </xUnit>
+</RunSettings>

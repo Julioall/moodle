@@ -1,0 +1,39 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "moodle",
+  "version": "1.0.1",
+  "description": "Fluxos seguros e reutilizáveis para cursos, conteúdos, atividades, estudantes, avaliação, acompanhamento e relatórios no Moodle.",
+  "author": {
+    "name": "Moodle contributors",
+    "url": "https://github.com/Julioall/moodle-conector"
+  },
+  "homepage": "https://github.com/Julioall/moodle-conector",
+  "repository": "https://github.com/Julioall/moodle-conector",
+  "keywords": [
+    "moodle",
+    "education",
+    "mcp",
+    "skills",
+    "pedagogy"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Moodle",
+        "shortDescription": "Fluxos seguros para trabalho acadêmico no Moodle.",
+        "longDescription": "Combina skills reutilizáveis com uma conexão MCP configurada para o Moodle, permitindo consultar cursos e conteúdos, acompanhar estudantes, revisar entregas, preparar pacotes ZIP de correção, gerar relatórios e executar escritas controladas com prévia e confirmação humana.",
+        "developerName": "Moodle contributors",
+        "category": "Productivity",
+        "capabilities": [
+          "Skills",
+          "MCP"
+        ],
+        "defaultPrompt": [
+          "Ajude-me a acompanhar uma turma Moodle com segurança.",
+          "Analise as atividades pendentes do meu curso e priorize o que exige atenção.",
+          "Prepare uma revisão de entregas Moodle sem publicar alterações sem confirmação."
+        ]
+      }
+    }
+  }
+}

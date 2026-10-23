@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Fóruns"
+  short_description: "Leia e publique em fóruns"
+  default_prompt: "Use $moodle-forums para ler fóruns e preparar publicação somente quando houver intenção explícita."

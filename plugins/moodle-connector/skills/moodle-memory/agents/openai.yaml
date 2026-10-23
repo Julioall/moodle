@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Memória"
+  short_description: "Use a memória privada do conector"
+  default_prompt: "Use $moodle-memory para consultar ou manter contexto durável privado do conector sem expor dados sensíveis."

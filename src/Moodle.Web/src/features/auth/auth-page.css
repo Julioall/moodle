@@ -1,0 +1,21 @@
+.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 460px); gap: 72px; align-items: center; justify-content: center; padding: 48px clamp(24px, 8vw, 120px); background: #f7f8fa; color: #182230; }
+.auth-brand-panel { max-width: 520px; }
+.auth-brand-panel .brand-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: #2459a6; color: #fff; font-size: 24px; font-weight: 800; box-shadow: 0 10px 24px rgba(36, 89, 166, .18); }
+.auth-kicker, .auth-label { margin: 22px 0 10px; color: #2459a6; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.auth-brand-panel h1 { max-width: 460px; margin: 0; color: #182230; font-size: clamp(34px, 5vw, 56px); line-height: 1.04; letter-spacing: -.04em; }
+.auth-brand-panel > p:last-child { max-width: 420px; margin-top: 22px; color: #657286; font-size: 17px; line-height: 1.6; }
+.auth-card { width: 100%; padding: 34px; border: 1px solid #e3e7ed; border-radius: 18px; background: #fff; box-shadow: 0 18px 50px rgba(22, 34, 51, .08); }
+.auth-card-header h2 { margin: 0; font-size: 28px; letter-spacing: -.03em; }
+.auth-card-header p { margin: 8px 0 24px; color: #657286; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 24px; padding: 4px; border-radius: 9px; background: #f1f3f6; }
+.auth-tabs button { border: 0; border-radius: 7px; padding: 10px; background: transparent; color: #657286; font: inherit; font-weight: 700; cursor: pointer; }
+.auth-tabs button.active { background: #fff; color: #2459a6; box-shadow: 0 1px 4px rgba(22, 34, 51, .1); }
+.auth-form { display: grid; gap: 16px; }
+.auth-form label, .connection-form label { display: grid; gap: 7px; color: #354255; font-size: 13px; font-weight: 700; }
+.auth-form input, .connection-form input { min-height: 42px; padding: 10px 12px; border: 1px solid #d8dee7; border-radius: 8px; background: #fff; color: #182230; font: inherit; outline: none; }
+.auth-form input:focus, .connection-form input:focus { border-color: #2459a6; box-shadow: 0 0 0 3px rgba(36, 89, 166, .12); }
+.auth-form small { color: #8792a2; font-weight: 400; }
+.auth-submit { min-height: 44px; margin-top: 4px; border: 0; border-radius: 8px; background: #2459a6; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.auth-submit:disabled { opacity: .65; cursor: wait; }
+.auth-error { margin: 0; padding: 11px 12px; border-radius: 8px; background: #fff1f0; color: #a23d35; font-size: 13px; }
+@media (max-width: 760px) { .auth-page { grid-template-columns: 1fr; gap: 28px; padding: 28px 18px; } .auth-brand-panel h1 { font-size: 38px; } .auth-card { padding: 24px; } }

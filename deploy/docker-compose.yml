@@ -1,0 +1,129 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: moodle:local
+    container_name: moodle-app
+    restart: unless-stopped
+    stop_grace_period: 20s
+    env_file:
+      - ${APP_ENV_FILE:-${ENV_FILE:-.env.production}}
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:8080
+      # Allow local development to provide a valid protector key without
+      # editing the versioned environment file.
+      ConnectorSecrets__EncryptionKeyBase64: ${CONNECTOR_SECRETS_ENCRYPTION_KEY_BASE64:-replace-with-32-byte-base64-key}
+      # Demo data stays disabled in every Compose deployment profile.
+      MoodleApi__UseStubData: "false"
+      MoodleProxy__UseStubData: "false"
+      # Package ZIPs must live on the persistent app-data volume. Override this
+      # with a shared filesystem when running more than one application replica.
+      GradingLimits__GradingPackageBlobRootDirectory: ${GRADING_PACKAGE_BLOB_ROOT_DIRECTORY:-/app/data/private-grading-packages}
+      # Report artifacts contain academic data and must stay on persistent,
+      # shared storage when more than one application replica serves downloads.
+      ReportArtifacts__RootDirectory: ${REPORT_ARTIFACTS_ROOT_DIRECTORY:-/app/data/private-reports}
+      # Write capabilities are controlled by explicit deployment environment
+      # variables, rather than by the versioned application defaults.
+      Features__MessagesWriteEnabled: ${FEATURES_MESSAGES_WRITE_ENABLED:-false}
+      Features__AssignmentFeedbackWriteEnabled: ${FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED:-false}
+      Features__AssignmentGradeWriteEnabled: ${FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED:-false}
+      # Professional planner surfaces are enabled progressively per environment.
+      Features__ProfessionalAgendaEnabled: ${FEATURES_PROFESSIONAL_AGENDA_ENABLED:-false}
+      Features__ProfessionalTasksEnabled: ${FEATURES_PROFESSIONAL_TASKS_ENABLED:-false}
+    ports:
+      # The reverse proxy is the only public entry point. Keep direct ASP.NET
+      # access on loopback for host health checks and local diagnostics.
+      - "127.0.0.1:${APP_PORT:-8787}:8080"
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # The workflow migrates in a one-shot process before starting this app.
+      # The runtime only verifies schema and serves health after startup.
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 2m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  migration:
+    profiles:
+      - migration
+    image: moodle:local
+    container_name: moodle-migration
+    restart: "no"
+    env_file:
+      - ${APP_ENV_FILE:-${ENV_FILE:-.env.production}}
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      Postgres__ConnectionString: "${Postgres__ConnectionString:-}"
+      Schema__MigrationOnly: "true"
+      Schema__ApplyOnStartup: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  caddy:
+    profiles:
+      - https
+    image: caddy:2-alpine
+    container_name: moodle-caddy
+    restart: unless-stopped
+    env_file:
+      - ${CADDY_ENV_FILE:-${ENV_FILE:-.env.production}}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${CADDYFILE:-./deploy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: moodle-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-MOODLE}
+      POSTGRES_USER: ${POSTGRES_USER:-MOODLE}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  app-data:
+  postgres-data:
+  caddy-data:
+  caddy-config:

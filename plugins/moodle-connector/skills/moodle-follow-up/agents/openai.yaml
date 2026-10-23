@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Acompanhamento"
+  short_description: "Identifique estudantes para acompanhamento"
+  default_prompt: "Use $moodle-follow-up para identificar estudantes que precisam de acompanhamento usando sinais observáveis."

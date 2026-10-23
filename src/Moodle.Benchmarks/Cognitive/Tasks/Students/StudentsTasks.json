@@ -1,0 +1,57 @@
+[
+  {
+    "id": "students.list.001",
+    "category": "students",
+    "prompt": "No SENAI, liste os estudantes matriculados no curso 8887.",
+    "expectedIntent": "students.list",
+    "allowedOperations": [ "list_course_students", "list_course_participants", "core_enrol_get_enrolled_users" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  },
+  {
+    "id": "students.list.002",
+    "category": "students",
+    "prompt": "No Moodle FIEG, mostre os participantes do curso 33458.",
+    "expectedIntent": "students.list",
+    "allowedOperations": [ "list_course_participants", "list_course_students", "core_enrol_get_enrolled_users" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "fieg",
+    "isCriticalTask": false
+  },
+  {
+    "id": "students.groups.001",
+    "category": "students",
+    "prompt": "No SENAI, liste os grupos do curso 8887.",
+    "expectedIntent": "students.groups",
+    "allowedOperations": [ "list_course_groups", "core_group_get_course_groups" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  },
+  {
+    "id": "students.groups.002",
+    "category": "students",
+    "prompt": "No Moodle FIEG, consulte os membros do grupo 1 no curso 33458.",
+    "expectedIntent": "students.groups",
+    "allowedOperations": [ "get_group_members", "core_group_get_course_user_groups" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "fieg",
+    "isCriticalTask": false
+  },
+  {
+    "id": "students.activity.001",
+    "category": "students",
+    "prompt": "No SENAI, identifique estudantes sem acesso recente ao curso 8887.",
+    "expectedIntent": "students.activity",
+    "allowedOperations": [ "list_students_without_recent_access", "core_enrol_get_enrolled_users" ],
+    "forbiddenOperations": [],
+    "requiresCompleteDataset": false,
+    "expectedConnection": "senai",
+    "isCriticalTask": false
+  }
+]

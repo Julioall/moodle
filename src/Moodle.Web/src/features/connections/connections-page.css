@@ -1,0 +1,28 @@
+.connection-management { margin-bottom: 24px; }
+.connection-management h2 { margin: 0; font-size: 18px; }
+.connection-management p { color: #657286; }
+.connection-form { display: grid; gap: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.form-grid .wide { grid-column: 1 / -1; }
+.form-checks { display: flex; flex-wrap: wrap; gap: 18px; }
+.form-checks label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.form-checks input { accent-color: #2459a6; }
+.form-actions { display: flex; align-items: center; gap: 14px; }
+.form-success { margin: 0; color: #287653; font-size: 13px; }
+.connection-test { margin-top: 16px; border: 1px solid #d6deea; border-radius: 6px; background: #fff; color: #2459a6; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.connection-test:disabled { cursor: wait; opacity: .65; }
+.connection-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.connection-action-secondary, .connection-action-danger { border: 1px solid #d6deea; border-radius: 6px; background: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.connection-action-danger { border-color: #e8b5b5; color: #b42318; }
+.connection-action-secondary:disabled, .connection-action-danger:disabled { cursor: not-allowed; opacity: .55; }
+.connection-dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgb(15 23 42 / 0.45); }
+.connection-dialog { width: min(100%, 520px); border-radius: 12px; background: #fff; padding: 24px; box-shadow: 0 20px 50px rgb(15 23 42 / 0.25); }
+.connection-dialog h2 { margin: 0 0 8px; font-size: 20px; }
+.connection-dialog p { color: #657286; font-size: 14px; }
+.connection-summary { margin: 16px 0; border-radius: 8px; background: #f5f7fa; padding: 12px 14px; }
+.connection-summary p { margin: 4px 0; }
+.connection-radio { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 14px; font-weight: 600; }
+.connection-confirm { display: grid; gap: 6px; margin-top: 16px; font-size: 13px; }
+.connection-confirm input { height: 40px; border: 1px solid #d6deea; border-radius: 6px; padding: 8px 10px; }
+.connection-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+@media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } .form-grid .wide { grid-column: auto; } }

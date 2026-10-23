@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Core"
+  short_description: "Diagnostique conexão e capabilities"
+  default_prompt: "Use $moodle-core para diagnosticar por que uma operação do Moodle não está funcionando e escolher a rota segura."

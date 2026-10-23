@@ -1,0 +1,242 @@
+name: Ops - Limpeza e Reset da VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_full_reset:
+        description: Type RESET_VPS to remove Docker data, env files and app files from the VPS.
+        required: true
+        type: string
+      remove_all_docker_data:
+        description: Stop containers and remove Docker data on the VPS, including volumes.
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      clear_apt_cache:
+        description: Clear apt package cache and temporary package lists.
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps-moodle
+  cancel-in-progress: false
+
+env:
+  VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/moodle' }}
+  VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+  COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'moodle' }}
+  CONFIRM_FULL_RESET: ${{ inputs.confirm_full_reset }}
+  REMOVE_ALL_DOCKER_DATA: ${{ inputs.remove_all_docker_data }}
+  CLEAR_APT_CACHE: ${{ inputs.clear_apt_cache }}
+  VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY }}
+
+jobs:
+  cleanup:
+    name: Reset VPS for clean deployment
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: moodle
+
+    steps:
+      - name: Validate VPS reset configuration
+        run: |
+          test -n "${{ secrets.VPS_HOST }}" || (echo "::error::Configure VPS_HOST" && exit 1)
+          test -n "${{ secrets.VPS_USER }}" || (echo "::error::Configure VPS_USER" && exit 1)
+          test -n "$VPS_AUTH_SECRET" || (echo "::error::Configure VPS_SSH_KEY with a private key or SSH password" && exit 1)
+
+          if [ "$CONFIRM_FULL_RESET" != "RESET_VPS" ]; then
+            echo "::error::This cleanup is destructive. Type RESET_VPS in confirm_full_reset to continue."
+            exit 1
+          fi
+
+          case "$REMOVE_ALL_DOCKER_DATA" in
+            true|false) ;;
+            *) echo "::error::REMOVE_ALL_DOCKER_DATA must be true or false"; exit 1 ;;
+          esac
+
+          case "$CLEAR_APT_CACHE" in
+            true|false) ;;
+            *) echo "::error::CLEAR_APT_CACHE must be true or false"; exit 1 ;;
+          esac
+
+          case "$VPS_APP_DIR" in
+            /*) ;;
+            *) echo "::error::VPS_APP_DIR must be an absolute path"; exit 1 ;;
+          esac
+
+          if [ "$VPS_APP_DIR" = "/" ]; then
+            echo "::error::VPS_APP_DIR cannot be /"
+            exit 1
+          fi
+
+      - name: Configure SSH auth
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$VPS_SSH_PORT" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+          if printf '%s' "$VPS_AUTH_SECRET" | grep -q "BEGIN .*PRIVATE KEY"; then
+            printf '%s\n' "$VPS_AUTH_SECRET" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            echo "VPS_AUTH_MODE=key" >> "$GITHUB_ENV"
+          else
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+            echo "VPS_AUTH_MODE=password" >> "$GITHUB_ENV"
+          fi
+
+      - name: Reset remote VPS state
+        run: |
+          REMOTE_SCRIPT="$(cat <<'EOF'
+          set -euo pipefail
+
+          if [ -z "$VPS_APP_DIR" ] || [ "$VPS_APP_DIR" = "/" ]; then
+            echo "Refusing to clean invalid VPS_APP_DIR: $VPS_APP_DIR"
+            exit 1
+          fi
+
+          case "$VPS_APP_DIR" in
+            /*) ;;
+            *)
+              echo "Refusing to clean non-absolute VPS_APP_DIR: $VPS_APP_DIR"
+              exit 1
+              ;;
+          esac
+
+          SUDO=''
+          if [ "$(id -u)" -ne 0 ]; then
+            SUDO='sudo'
+          fi
+
+          echo "Resetting deployment directory: $VPS_APP_DIR"
+          echo "Compose project: $COMPOSE_PROJECT_NAME"
+
+          if command -v docker >/dev/null 2>&1; then
+            DOCKER='docker'
+            if ! docker info >/dev/null 2>&1; then
+              DOCKER='sudo docker'
+            fi
+
+            echo "Docker disk usage before reset:"
+            $DOCKER system df || true
+
+            if [ -d "$VPS_APP_DIR" ]; then
+              cd "$VPS_APP_DIR"
+              export COMPOSE_PROJECT_NAME
+
+              if $DOCKER compose version >/dev/null 2>&1 && [ -f deploy/docker-compose.yml ]; then
+                if [ -f .env.production ]; then
+                  $DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production down --volumes --remove-orphans --rmi local || true
+                else
+                  $DOCKER compose --project-directory . -f deploy/docker-compose.yml down --volumes --remove-orphans --rmi local || true
+                fi
+              fi
+            fi
+
+            if [ "$REMOVE_ALL_DOCKER_DATA" = "true" ]; then
+              ALL_CONTAINERS="$($DOCKER ps -aq 2>/dev/null || true)"
+              if [ -n "$ALL_CONTAINERS" ]; then
+                echo "Stopping and removing all Docker containers on the VPS"
+                $DOCKER rm -f $ALL_CONTAINERS || true
+              fi
+            else
+              $DOCKER rm -f \
+                moodle-app \
+                moodle-caddy \
+                moodle-postgres >/dev/null 2>&1 || true
+            fi
+
+            PROJECT_CONTAINERS="$($DOCKER ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+            if [ -n "$PROJECT_CONTAINERS" ]; then
+              $DOCKER rm -f $PROJECT_CONTAINERS || true
+            fi
+
+            PROJECT_NETWORKS="$($DOCKER network ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+            if [ -n "$PROJECT_NETWORKS" ]; then
+              $DOCKER network rm $PROJECT_NETWORKS || true
+            fi
+
+            PROJECT_VOLUMES="$($DOCKER volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+            if [ -n "$PROJECT_VOLUMES" ]; then
+              $DOCKER volume rm -f $PROJECT_VOLUMES || true
+            fi
+
+            for volume in \
+              "${COMPOSE_PROJECT_NAME}_postgres-data" \
+              "${COMPOSE_PROJECT_NAME}_app-data" \
+              "${COMPOSE_PROJECT_NAME}_caddy-data" \
+              "${COMPOSE_PROJECT_NAME}_caddy-config"; do
+              $DOCKER volume rm -f "$volume" >/dev/null 2>&1 || true
+            done
+
+            if [ "$REMOVE_ALL_DOCKER_DATA" = "true" ]; then
+              echo "Pruning Docker data, including volumes"
+              $DOCKER system prune -af --volumes
+              $DOCKER builder prune -af
+            else
+              echo "Pruning unused Docker data without stopping unrelated containers"
+              $DOCKER container prune -f
+              $DOCKER image prune -af
+              $DOCKER network prune -f
+              $DOCKER builder prune -af
+            fi
+
+            echo "Docker disk usage after reset:"
+            $DOCKER system df || true
+          else
+            echo "Docker is not installed; skipping Docker cleanup"
+          fi
+
+          echo "Removing deployment files and environment files"
+          if [ -d "$VPS_APP_DIR" ]; then
+            $SUDO find "$VPS_APP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          fi
+
+          $SUDO mkdir -p "$VPS_APP_DIR"
+          $SUDO chown -R "$REMOTE_DEPLOY_USER": "$VPS_APP_DIR" || true
+
+          echo "Removing known project-level environment files"
+          $SUDO rm -f \
+            /etc/default/moodle \
+            /etc/environment.d/moodle.conf \
+            /etc/profile.d/moodle.sh \
+            /etc/moodle.env || true
+
+          $SUDO rm -rf \
+            /tmp/moodle \
+            /tmp/moodle-* \
+            /var/tmp/moodle \
+            /var/tmp/moodle-* || true
+
+          if [ "$CLEAR_APT_CACHE" = "true" ] && command -v apt-get >/dev/null 2>&1; then
+            echo "Clearing apt cache"
+            $SUDO apt-get clean || true
+            $SUDO rm -rf /var/lib/apt/lists/* || true
+          fi
+
+          echo "VPS cleanup completed. The next deploy will sync a fresh repository copy and write a new .env.production."
+          EOF
+          )"
+
+          REMOTE_ENV=$(printf \
+            'VPS_APP_DIR=%q COMPOSE_PROJECT_NAME=%q REMOVE_ALL_DOCKER_DATA=%q CLEAR_APT_CACHE=%q REMOTE_DEPLOY_USER=%q bash -s' \
+            "$VPS_APP_DIR" \
+            "$COMPOSE_PROJECT_NAME" \
+            "$REMOVE_ALL_DOCKER_DATA" \
+            "$CLEAR_APT_CACHE" \
+            "${{ secrets.VPS_USER }}")
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            ssh -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$REMOTE_ENV" <<< "$REMOTE_SCRIPT"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" ssh -p "$VPS_SSH_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$REMOTE_ENV" <<< "$REMOTE_SCRIPT"
+          fi

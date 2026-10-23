@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Tarefas"
+  short_description: "Consulte tarefas e submissões"
+  default_prompt: "Use $moodle-assignments para consultar tarefas, submissões, pendências e atrasos sem atribuir notas."

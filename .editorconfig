@@ -1,0 +1,16 @@
+root = true
+
+[/deploy/Dockerfile]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[/deploy/Caddyfile]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[*.{yml,yaml,sh}]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Moodle Conteúdo"
+  short_description: "Leia arquivos, páginas e SCORM"
+  default_prompt: "Use $moodle-content para ler arquivos, páginas ou SCORM e responder apenas com conteúdo realmente observado."
