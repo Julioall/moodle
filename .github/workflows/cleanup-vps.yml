@@ -3,6 +3,14 @@ name: Ops - Limpeza e Reset da VPS
 on:
   workflow_dispatch:
     inputs:
+      target_environment:
+        description: Select the GitHub environment to clean. Production is allowed only from master.
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - production
       confirm_full_reset:
         description: Type RESET_VPS to remove Docker data, env files and app files from the VPS.
         required: true
@@ -32,24 +40,39 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/moodle' }}
-  VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
-  COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'moodle' }}
   CONFIRM_FULL_RESET: ${{ inputs.confirm_full_reset }}
+  CLEANUP_TARGET: ${{ inputs.target_environment }}
   REMOVE_ALL_DOCKER_DATA: ${{ inputs.remove_all_docker_data }}
   CLEAR_APT_CACHE: ${{ inputs.clear_apt_cache }}
-  VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY }}
 
 jobs:
   cleanup:
     name: Reset VPS for clean deployment
-    if: github.ref == 'refs/heads/master'
+    if: >-
+      (github.ref == 'refs/heads/dev' && inputs.target_environment == 'dev') ||
+      (github.ref == 'refs/heads/master' &&
+       (inputs.target_environment == 'dev' || inputs.target_environment == 'production'))
     runs-on: ubuntu-latest
-    environment: moodle
+    environment: ${{ inputs.target_environment }}
+    env:
+      VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/moodle' }}
+      VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+      COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'moodle' }}
+      VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY }}
 
     steps:
       - name: Validate VPS reset configuration
         run: |
+          case "$CLEANUP_TARGET" in
+            dev|production) ;;
+            *) echo "::error::target_environment must be dev or production"; exit 1 ;;
+          esac
+
+          if [ "$CLEANUP_TARGET" = "production" ] && [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::Production cleanup may run only from master."
+            exit 1
+          fi
+
           test -n "${{ secrets.VPS_HOST }}" || (echo "::error::Configure VPS_HOST" && exit 1)
           test -n "${{ secrets.VPS_USER }}" || (echo "::error::Configure VPS_USER" && exit 1)
           test -n "$VPS_AUTH_SECRET" || (echo "::error::Configure VPS_SSH_KEY with a private key or SSH password" && exit 1)

@@ -61,7 +61,9 @@ correspondente habilitado.
 ## Publicação
 
 Confira a branch e os workflows que serão acionados antes do push. CI e validação documental
-executam em `dev` e `master`; nenhum deploy é feito a partir de `dev`. O deploy de produção só
-ocorre após o CI concluir com sucesso para um push em `master`, ou por acionamento manual do
-workflow a partir de `master`. Operações de VPS e diagnósticos de produção também são restritos a
-`master`.
+executam em `dev` e `master`; nenhum deploy é feito a partir de `dev`. O deploy usa o GitHub
+Environment `production` e só ocorre após o CI concluir com sucesso para um push em `master`, ou
+por acionamento manual do workflow a partir de `master`. A limpeza da VPS é manual, seleciona o
+Environment `dev` (padrão) ou `production` e só permite a opção de produção a partir de `master`.
+Diagnósticos usam o Environment `production` e são restritos a `master`. Configure secrets e vars
+separadamente nos GitHub Environments `dev` e `production`.
