@@ -44,12 +44,15 @@ public sealed class PedagogicContentPublishTests
     }
 
     [Fact]
-    public async Task DeployWorkflow_DeveSerAcionadoPorAlteracoesEmPublic()
+    public async Task Pipeline_DeveExecutarCiEDispararDeployAposAlteracoesEmPublic()
     {
-        var workflowPath = Path.Combine(FindRepositoryRoot(), ".github", "workflows", "deploy-vps.yml");
-        var lines = await File.ReadAllLinesAsync(workflowPath);
+        var workflowsDirectory = Path.Combine(FindRepositoryRoot(), ".github", "workflows");
+        var ciLines = await File.ReadAllLinesAsync(Path.Combine(workflowsDirectory, "ci.yml"));
+        var deployLines = await File.ReadAllLinesAsync(Path.Combine(workflowsDirectory, "deploy-vps.yml"));
 
-        Assert.Contains(lines, line => line.Trim() is "- public/**" or "- public/pedagogic/**");
+        Assert.Contains(ciLines, line => line.Trim() is "- public/**" or "- public/pedagogic/**");
+        Assert.Contains(deployLines, line => line.Trim() == "workflow_run:");
+        Assert.Contains(deployLines, line => line.Trim() == "- CI - Build, Testes e Qualidade");
     }
 
     private static string NormalizePath(string? path) => (path ?? string.Empty).Replace('\\', '/');
