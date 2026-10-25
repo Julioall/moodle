@@ -91,7 +91,7 @@ public sealed class ReportSchemaLedgerRepairPostgresIntegrationTests
                         @templateId, @ownerId, 'legacy-key', 'Preserved legacy template', 'Synthetic row for migration coverage',
                         '{}'::jsonb, 1, false, false, NULL, NULL, now(), now(), NULL);
 
-                    UPDATE MOODLE_schema_versions
+                    UPDATE "MOODLE_schema_versions"
                     SET "Description" = CASE "Version"
                         WHEN 72 THEN 'editable personal custom report templates'
                         WHEN 73 THEN 'durable custom report runs, rows and exports'
@@ -129,7 +129,7 @@ public sealed class ReportSchemaLedgerRepairPostgresIntegrationTests
                        AND EXISTS (SELECT 1 FROM information_schema.columns
                                    WHERE table_schema = current_schema() AND table_name = 'moodle_sync_states'
                                      AND column_name = 'WorkPolicy')
-                       AND (SELECT "Description" FROM MOODLE_schema_versions WHERE "Version" = 72)
+                       AND (SELECT "Description" FROM "MOODLE_schema_versions" WHERE "Version" = 72)
                            = 'editable personal custom report templates';
                     """;
                 Assert.True(Convert.ToBoolean(await verify.ExecuteScalarAsync()));

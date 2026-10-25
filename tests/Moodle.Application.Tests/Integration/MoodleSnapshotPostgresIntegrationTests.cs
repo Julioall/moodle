@@ -407,7 +407,7 @@ public sealed class ConnectorDbContextSchemaInitializerPostgresTests
             {
                 await connection.OpenAsync();
                 await using var command = connection.CreateCommand();
-                command.CommandText = "SELECT MAX(\"Version\") FROM MOODLE_schema_versions";
+                command.CommandText = "SELECT MAX(\"Version\") FROM \"MOODLE_schema_versions\"";
                 Assert.Equal(84, Convert.ToInt32(await command.ExecuteScalarAsync()));
 
                 command.CommandText = """
@@ -456,7 +456,7 @@ public sealed class ConnectorDbContextSchemaInitializerPostgresTests
                         WHERE table_schema = current_schema()
                           AND table_name = 'moodle_call_diagnostics'
                           AND column_name IN ('RawPayloadState','RawPayloadSizeBytes','RawPayloadSha256','RawPayloadContentType'))
-                    AND (SELECT MAX("Version") = 84 FROM MOODLE_schema_versions);
+                    AND (SELECT MAX("Version") = 84 FROM "MOODLE_schema_versions");
                 """;
             Assert.True(Convert.ToBoolean(await verify.ExecuteScalarAsync()));
 

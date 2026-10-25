@@ -73,7 +73,7 @@ public sealed class MoodleCallDiagnosticsPostgresTests
                 await grantSchema.ExecuteNonQueryAsync();
 
                 await using var createReaderRoles = grant.CreateCommand();
-                createReaderRoles.CommandText = $"REVOKE SELECT, UPDATE ON TABLE \"{schema}\".moodle_call_diagnostic_payloads FROM \"{appRole}\"; CREATE ROLE \"{readerRole}\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; CREATE ROLE \"{operatorRole}\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS PASSWORD '{operatorPassword}'; GRANT CONNECT ON DATABASE \"{adminBuilder.Database}\" TO \"{readerRole}\"; GRANT USAGE ON SCHEMA \"{schema}\" TO \"{readerRole}\"; GRANT SELECT ON TABLE \"{schema}\".moodle_call_diagnostics, \"{schema}\".moodle_call_diagnostic_payloads, \"{schema}\".MOODLE_schema_versions TO \"{readerRole}\"; GRANT \"{readerRole}\" TO \"{operatorRole}\"";
+                createReaderRoles.CommandText = $"REVOKE SELECT, UPDATE ON TABLE \"{schema}\".moodle_call_diagnostic_payloads FROM \"{appRole}\"; CREATE ROLE \"{readerRole}\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; CREATE ROLE \"{operatorRole}\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS PASSWORD '{operatorPassword}'; GRANT CONNECT ON DATABASE \"{adminBuilder.Database}\" TO \"{readerRole}\"; GRANT USAGE ON SCHEMA \"{schema}\" TO \"{readerRole}\"; GRANT SELECT ON TABLE \"{schema}\".moodle_call_diagnostics, \"{schema}\".moodle_call_diagnostic_payloads, \"{schema}\".\"MOODLE_schema_versions\" TO \"{readerRole}\"; GRANT \"{readerRole}\" TO \"{operatorRole}\"";
                 await createReaderRoles.ExecuteNonQueryAsync();
             }
 
@@ -86,7 +86,7 @@ public sealed class MoodleCallDiagnosticsPostgresTests
             {
                 await readerConnection.OpenAsync();
                 await using var permissions = readerConnection.CreateCommand();
-                permissions.CommandText = "SELECT rolsuper, rolcreatedb, rolcreaterole, has_table_privilege(current_user, 'moodle_call_diagnostics', 'SELECT'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'SELECT'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'INSERT'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'DELETE'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'UPDATE'), has_table_privilege(current_user, 'MOODLE_schema_versions', 'SELECT'), has_table_privilege(current_user, 'connector_clients', 'SELECT') FROM pg_roles WHERE rolname = current_user";
+                permissions.CommandText = "SELECT rolsuper, rolcreatedb, rolcreaterole, has_table_privilege(current_user, 'moodle_call_diagnostics', 'SELECT'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'SELECT'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'INSERT'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'DELETE'), has_table_privilege(current_user, 'moodle_call_diagnostic_payloads', 'UPDATE'), has_table_privilege(current_user, '\"MOODLE_schema_versions\"', 'SELECT'), has_table_privilege(current_user, 'connector_clients', 'SELECT') FROM pg_roles WHERE rolname = current_user";
                 await using var reader = await permissions.ExecuteReaderAsync();
                 Assert.True(await reader.ReadAsync());
                 Assert.False(reader.GetBoolean(0));
@@ -263,10 +263,35 @@ public sealed class MoodleCallDiagnosticsPostgresTests
         {
             await using var admin = new NpgsqlConnection(adminBuilder.ConnectionString);
             await admin.OpenAsync();
-            await using var cleanup = admin.CreateCommand();
-            cleanup.CommandText = $"REVOKE \"{readerRole}\" FROM \"{operatorRole}\"; DROP OWNED BY \"{operatorRole}\"; DROP OWNED BY \"{readerRole}\"; DROP OWNED BY \"{appRole}\"; DROP ROLE IF EXISTS \"{operatorRole}\"; DROP ROLE IF EXISTS \"{readerRole}\"; DROP ROLE IF EXISTS \"{appRole}\"; DROP SCHEMA IF EXISTS \"{schema}\" CASCADE";
-            await cleanup.ExecuteNonQueryAsync();
+            if (await RoleExistsAsync(admin, operatorRole) && await RoleExistsAsync(admin, readerRole))
+                await ExecuteCleanupCommandAsync(admin, $"REVOKE \"{readerRole}\" FROM \"{operatorRole}\"");
+
+            foreach (var role in new[] { operatorRole, readerRole, appRole })
+            {
+                if (!await RoleExistsAsync(admin, role))
+                    continue;
+
+                await ExecuteCleanupCommandAsync(admin, $"DROP OWNED BY \"{role}\"");
+                await ExecuteCleanupCommandAsync(admin, $"DROP ROLE \"{role}\"");
+            }
+
+            await ExecuteCleanupCommandAsync(admin, $"DROP SCHEMA IF EXISTS \"{schema}\" CASCADE");
         }
+    }
+
+    private static async Task<bool> RoleExistsAsync(NpgsqlConnection connection, string roleName)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = @roleName)";
+        command.Parameters.AddWithValue("roleName", roleName);
+        return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task ExecuteCleanupCommandAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
     }
 
     private sealed class ConnectorDbContextFactory(DbContextOptions<ConnectorDbContext> options)

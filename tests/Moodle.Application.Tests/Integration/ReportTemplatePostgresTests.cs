@@ -161,11 +161,11 @@ public sealed class ReportTemplatePostgresTests
             Assert.Empty(await db.ReportTemplates.ToListAsync());
             foreach (var version in new[] { 72, 73, 74, 75, 76, 77 })
             {
-                var description = await db.Database.SqlQuery<string>($"SELECT \"Description\" AS \"Value\" FROM MOODLE_schema_versions WHERE \"Version\" = {version}").SingleAsync();
-                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE MOODLE_schema_versions SET \"Description\" = 'incompatible historical builder' WHERE \"Version\" = {version}");
+                var description = await db.Database.SqlQuery<string>($"SELECT \"Description\" AS \"Value\" FROM \"MOODLE_schema_versions\" WHERE \"Version\" = {version}").SingleAsync();
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"MOODLE_schema_versions\" SET \"Description\" = 'incompatible historical builder' WHERE \"Version\" = {version}");
                 var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => db.ApplyVersionedSchemaAsync());
                 Assert.Contains("Unknown schema ledger entry", exception.Message);
-                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE MOODLE_schema_versions SET \"Description\" = {description} WHERE \"Version\" = {version}");
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"MOODLE_schema_versions\" SET \"Description\" = {description} WHERE \"Version\" = {version}");
             }
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE report_templates DROP COLUMN \"Description\"");
             var mismatch = await Assert.ThrowsAsync<InvalidOperationException>(() => db.ApplyVersionedSchemaAsync());
