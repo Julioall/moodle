@@ -752,10 +752,10 @@ jobs:
           \$DOCKER compose --project-directory . -f deploy/docker-compose.yml --env-file .env.production exec -T postgres \
             psql -v ON_ERROR_STOP=1 -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" <<SQL
           SELECT format('CREATE ROLE MOODLE_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', '\$APP_ROLE_PASSWORD')
-          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'MOODLE_app') \\gexec
+          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'moodle_app') \\gexec
           ALTER ROLE MOODLE_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '\$APP_ROLE_PASSWORD';
           SELECT format('CREATE ROLE MOODLE_diag_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT')
-          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'MOODLE_diag_reader') \\gexec
+          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'moodle_diag_reader') \\gexec
           ALTER ROLE MOODLE_diag_reader WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
           SELECT format('CREATE ROLE moodle_diagnostics_operator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS PASSWORD %L', '\$DIAGNOSTICS_DB_READER_PASSWORD')
           WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'moodle_diagnostics_operator') \\gexec
@@ -781,7 +781,7 @@ jobs:
           GRANT USAGE ON SCHEMA public TO MOODLE_diag_reader;
           GRANT SELECT ON moodle_call_diagnostics TO MOODLE_diag_reader;
           GRANT SELECT ON moodle_call_diagnostic_payloads TO MOODLE_diag_reader;
-          GRANT SELECT ON MOODLE_schema_versions TO MOODLE_diag_reader;
+          GRANT SELECT ON "MOODLE_schema_versions" TO MOODLE_diag_reader;
           REVOKE SELECT, UPDATE ON moodle_call_diagnostic_payloads FROM MOODLE_app;
           GRANT INSERT, DELETE ON moodle_call_diagnostic_payloads TO MOODLE_app;
           SQL
