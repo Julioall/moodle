@@ -152,6 +152,7 @@ jobs:
       - name: Validate delivery files
         run: |
           python scripts/check-dockerfile-encoding.py
+          python scripts/check-deploy-role-identifiers.py
           bash -n scripts/check-public-readiness.sh
 
       - name: Validate delivery topology
