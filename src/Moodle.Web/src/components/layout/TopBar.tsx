@@ -128,8 +128,8 @@ export function TopBar() {
         style={{ width: sidebarWidth }}
       >
         {sidebarState === 'collapsed' ? <>
-          <img src="/brand/moodle-icon.png" alt="Moodle Conector" className="h-7 w-7 dark:hidden" />
-          <img src="/brand/moodle-icon-white.png" alt="Moodle Conector" className="hidden h-7 w-7 dark:block" />
+          <img src="/brand/moodle-connector-icon.png" alt="Moodle Conector" className="h-7 w-7 dark:hidden" />
+          <img src="/brand/moodle-connector-icon-white.png" alt="Moodle Conector" className="hidden h-7 w-7 dark:block" />
         </> : (
           <div className="relative h-14 w-[144px] overflow-hidden">
             <MoodleLogo className="absolute left-0 top-1/2 h-auto w-full -translate-y-1/2" />
@@ -140,8 +140,8 @@ export function TopBar() {
       <div className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <SidebarTrigger className="md:hidden" />
-          <img src="/brand/moodle-icon.png" alt="Moodle Conector" className="h-7 w-7 dark:hidden md:hidden" />
-          <img src="/brand/moodle-icon-white.png" alt="Moodle Conector" className="hidden h-7 w-7 dark:block md:hidden" />
+          <img src="/brand/moodle-connector-icon.png" alt="Moodle Conector" className="h-7 w-7 dark:hidden md:hidden" />
+          <img src="/brand/moodle-connector-icon-white.png" alt="Moodle Conector" className="hidden h-7 w-7 dark:block md:hidden" />
           <div className="hidden items-center gap-2 whitespace-nowrap text-xs text-muted-foreground md:flex">
             <span>Última sincronização:</span>
             <span className="font-medium">{formatLastValidation(selectedConnection?.lastValidatedAt)}</span>
