@@ -81,7 +81,8 @@ internal static class AdmissionEndpointClassifier
             StaticAssetExemptionReason,
             "GET,HEAD /{*path:nonfile}");
         Add(routes, AdmissionTrafficClass.PublicAuthentication, "authentication",
-            "GET /auth/login", "POST /auth/login", "POST /api/account/login", "POST /api/account/register");
+            "GET /auth/login", "POST /auth/login", "POST /api/account/login", "POST /api/account/register",
+            "POST /api/account/password-reset/request", "POST /api/account/password-reset/complete");
         Add(routes, AdmissionTrafficClass.SessionControl, "session_control",
             "POST /auth/logout", "GET /api/account/me", "GET /api/csrf", "GET /api/session");
 
