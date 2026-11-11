@@ -58,10 +58,6 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
-            .AddOptions<PasswordRecoveryOptions>()
-            .Bind(configuration.GetSection(PasswordRecoveryOptions.SectionName));
-
-        services
             .AddOptions<MoodleApiOptions>()
             .Bind(configuration.GetSection(MoodleApiOptions.SectionName));
 
