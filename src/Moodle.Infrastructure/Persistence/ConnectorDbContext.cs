@@ -11,6 +11,7 @@ public sealed class ConnectorDbContext(DbContextOptions<ConnectorDbContext> opti
 {
     public DbSet<ConnectorClientCredentialEntity> ConnectorClients => Set<ConnectorClientCredentialEntity>();
     public DbSet<UserAccountEntity> UserAccounts => Set<UserAccountEntity>();
+    public DbSet<PasswordResetTokenEntity> PasswordResetTokens => Set<PasswordResetTokenEntity>();
     public DbSet<TeamEntity> Teams => Set<TeamEntity>();
     public DbSet<TeamMembershipEntity> TeamMemberships => Set<TeamMembershipEntity>();
     public DbSet<TeamInvitationEntity> TeamInvitations => Set<TeamInvitationEntity>();
@@ -109,6 +110,14 @@ public sealed class ConnectorDbContext(DbContextOptions<ConnectorDbContext> opti
         userEntity.Property(x => x.CreatedAtUtc).IsRequired();
         userEntity.Property(x => x.UpdatedAtUtc).IsRequired();
         userEntity.HasIndex(x => x.Email).IsUnique();
+
+        var resetToken = modelBuilder.Entity<PasswordResetTokenEntity>();
+        resetToken.ToTable("password_reset_tokens");
+        resetToken.HasKey(x => x.Id);
+        resetToken.Property(x => x.TokenHash).HasMaxLength(64).IsRequired();
+        resetToken.Property(x => x.ConsumedAtUtc).IsConcurrencyToken();
+        resetToken.HasIndex(x => x.TokenHash).IsUnique();
+        resetToken.HasIndex(x => new { x.UserId, x.CreatedAtUtc });
 
         var team = modelBuilder.Entity<TeamEntity>();
         team.ToTable("teams");

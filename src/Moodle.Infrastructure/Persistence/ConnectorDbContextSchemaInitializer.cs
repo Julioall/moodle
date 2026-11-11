@@ -4,7 +4,7 @@ namespace Moodle.Infrastructure;
 
 public static class ConnectorDbContextSchemaInitializer
 {
-    private const int LatestSchemaVersion = 85;
+    private const int LatestSchemaVersion = 86;
 
     private static readonly SchemaScriptPath[] SchemaScriptPaths =
     [
@@ -92,6 +92,7 @@ public static class ConnectorDbContextSchemaInitializer
         ,new(Path.Combine("Database", "Scripts", "083_grading_publication_claim_fencing.sql"), true)
         ,new(Path.Combine("Database", "Scripts", "084_grading_publication_dispatch_groups.sql"), true)
         ,new(Path.Combine("Database", "Scripts", "085_revoke_legacy_elevated_permissions.sql"), true)
+        ,new(Path.Combine("Database", "Scripts", "086_password_reset_one_time_tokens.sql"), true)
     ];
 
     public static async Task ApplyVersionedSchemaAsync(
@@ -168,6 +169,7 @@ public static class ConnectorDbContextSchemaInitializer
             SELECT
                 COALESCE(MAX("Version"), 0) >= {LatestSchemaVersion}
                 AND EXISTS (SELECT 1 FROM "MOODLE_schema_versions" WHERE "Version" = 85)
+                AND to_regclass('password_reset_tokens') IS NOT NULL
                 AND to_regclass('report_artifact_deletions') IS NOT NULL
                 AND to_regclass('moodle_call_diagnostics') IS NOT NULL
                 AND to_regclass('grading_publication_attempt_events') IS NOT NULL

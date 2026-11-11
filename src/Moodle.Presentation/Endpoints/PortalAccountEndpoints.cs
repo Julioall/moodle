@@ -119,6 +119,54 @@ internal static class PortalAccountEndpoints
             Results.Json(new { ok = false, error = "Exclusão administrativa em massa desativada até existir isolamento institucional." },
                 statusCode: StatusCodes.Status410Gone)).RequireRateLimiting(rateLimitPolicy);
 
+        app.MapPost("/api/account/password-reset/request", async (
+            PasswordResetRequestInput input,
+            HttpContext context,
+            IAccountPasswordResetService resetService,
+            IAntiforgery antiforgery,
+            PublicAccountRateLimiter limiter,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            context.Response.Headers.CacheControl = "no-store";
+            if (!resetService.IsEnabled)
+                return Results.Json(new { ok = false, error = "Recuperação de senha não configurada." },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            if (!limiter.TryAcquire(PublicAccountOperation.PasswordReset, input.Email, out var retryAfter))
+                return PublicAccountRateLimitResponse.TooManyRequests(context, retryAfter);
+            await resetService.RequestAsync(input.Email, cancellationToken);
+            // Account existence, rate limits per account and SMTP outcome are not disclosed.
+            return Results.Accepted(value: new { ok = true,
+                message = "Se a conta existir, as instruções serão enviadas ao e-mail cadastrado." });
+        }).RequireRateLimiting(rateLimitPolicy);
+
+        app.MapPost("/api/account/password-reset/complete", async (
+            PasswordResetCompleteInput input,
+            HttpContext context,
+            IAccountPasswordResetService resetService,
+            IAntiforgery antiforgery,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            context.Response.Headers.CacheControl = "no-store";
+            if (!resetService.IsEnabled)
+                return Results.Json(new { ok = false, error = "Recuperação de senha não configurada." },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            bool accepted;
+            try
+            {
+                accepted = await resetService.CompleteAsync(input.Token, input.NewPassword, cancellationToken);
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest(new { ok = false, error = "Senha deve ter entre 8 e 256 caracteres." });
+            }
+            if (!accepted)
+                return Results.BadRequest(new { ok = false, error = "Código de recuperação inválido ou expirado." });
+            await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Results.Ok(new { ok = true, message = "Senha redefinida. Entre novamente." });
+        }).RequireRateLimiting(rateLimitPolicy);
+
         app.MapPost("/api/account/login", async (
             LoginInput input,
             HttpContext context,
@@ -543,3 +591,5 @@ internal static class PortalAccountEndpoints
 }
 
 public sealed record ChangePasswordInput(string CurrentPassword, string NewPassword);
+public sealed record PasswordResetRequestInput(string Email);
+public sealed record PasswordResetCompleteInput(string Token, string NewPassword);

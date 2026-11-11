@@ -133,7 +133,9 @@ internal sealed class PortalApiAuthorizationMiddleware(IAuthorizationService aut
         "/api/info",
         "/api/csrf",
         "/api/account/register",
-        "/api/account/login"
+        "/api/account/login",
+        "/api/account/password-reset/request",
+        "/api/account/password-reset/complete"
     ];
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)

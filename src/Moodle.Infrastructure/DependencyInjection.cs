@@ -316,6 +316,13 @@ public static class DependencyInjection
             .AddHttpClient<IMoodleProxyGateway, MoodleProxyGateway>(ConfigureMoodleProxyClient)
             .AddMoodleResilience(moodleProxyResilience);
 
+        services
+            .AddOptions<PasswordResetOptions>()
+            .Bind(configuration.GetSection(PasswordResetOptions.SectionName))
+            .Validate(options => !options.Enabled || options.IsReady, "PasswordReset SMTP requer HTTPS, remetente e credenciais válidas.")
+            .ValidateOnStart();
+        services.AddScoped<IPasswordResetMailer, SmtpPasswordResetMailer>();
+        services.AddScoped<IAccountPasswordResetService, AccountPasswordResetService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<ReportJobArtifactWriter>();
         services.AddScoped<ReportJobClaimer>();
