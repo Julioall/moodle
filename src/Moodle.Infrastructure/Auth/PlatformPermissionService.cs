@@ -232,11 +232,16 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
                 member.Role == "administrator" &&
                 dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal))
             .Select(member => member.TeamId).ToArrayAsync(cancellationToken);
-        if (teamIds.Length == 0 ||
-            !await dbContext.TeamMemberships.AsNoTracking().AnyAsync(
-                member => member.UserId == targetUserId && member.IsActive && teamIds.Contains(member.TeamId),
-                cancellationToken))
-            throw new InvalidOperationException("O destino deve pertencer a uma equipe institucional administrada pelo solicitante.");
+        // Platform permissions affect the whole account, not just one team.
+        // Never allow a team administrator to alter a user who also belongs to
+        // another institution outside that administrator's authority.
+        var targetTeamIds = await dbContext.TeamMemberships.AsNoTracking()
+            .Where(member => member.UserId == targetUserId && member.IsActive &&
+                dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal))
+            .Select(member => member.TeamId).Distinct().ToArrayAsync(cancellationToken);
+        if (teamIds.Length == 0 || targetTeamIds.Length == 0 ||
+            targetTeamIds.Any(teamId => !teamIds.Contains(teamId)))
+            throw new InvalidOperationException("O destino também possui vínculos institucionais fora da autoridade do solicitante.");
     }
 
     private async Task EnsureCanManageGroupsAsync(Guid userId, CancellationToken cancellationToken)

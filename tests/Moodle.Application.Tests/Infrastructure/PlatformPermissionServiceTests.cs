@@ -156,6 +156,42 @@ public sealed class PlatformPermissionServiceTests
             sut.UpdateGroupAsync(new UpdatePermissionGroupRequest(actorId, group.Id, "Auditoria 2", "", ["students.view"]), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CannotGrantGroupPermissionsToMemberOfUnmanagedInstitution()
+    {
+        await using var dbContext = CreateContext();
+        var actorId = Guid.NewGuid();
+        var targetId = Guid.NewGuid();
+        var primaryTeamId = Guid.NewGuid();
+        var unrelatedTeamId = Guid.NewGuid();
+        var sut = new PlatformPermissionService(dbContext);
+        await sut.EnsureDefaultPermissionsAsync(actorId, CancellationToken.None);
+        dbContext.UserAccounts.Add(new UserAccountEntity
+        {
+            Id = targetId, Name = "Profissional compartilhado",
+            Email = "compartilhado@example.test", PasswordHash = "test"
+        });
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+        {
+            Id = Guid.NewGuid(), UserId = actorId, ChangedByUserId = actorId,
+            Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true
+        });
+        dbContext.Teams.AddRange(
+            new TeamEntity { Id = primaryTeamId, Name = "Instituição A", CreatedByUserId = actorId, IsPersonal = false },
+            new TeamEntity { Id = unrelatedTeamId, Name = "Instituição B", CreatedByUserId = Guid.NewGuid(), IsPersonal = false });
+        dbContext.TeamMemberships.AddRange(
+            new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = primaryTeamId, UserId = actorId, Role = "administrator", IsActive = true },
+            new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = primaryTeamId, UserId = targetId, Role = "member", IsActive = true },
+            new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = unrelatedTeamId, UserId = targetId, Role = "member", IsActive = true });
+        await dbContext.SaveChangesAsync();
+
+        var group = await sut.CreateGroupAsync(new CreatePermissionGroupRequest(
+            actorId, "Grupo com escopo", "", ["courses.view"]), CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.AddMemberAsync(new AddPermissionGroupMemberRequest(actorId, group.Id, targetId), CancellationToken.None));
+    }
+
     private static ConnectorDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ConnectorDbContext>()
