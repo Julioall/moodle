@@ -111,6 +111,14 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
                 item.CreatedByUserId == request.ActorUserId, cancellationToken);
         if (group is null) throw new InvalidOperationException("Grupo de permissões não encontrado.");
 
+        // Legacy cross-tenant memberships may predate the authorization fix.
+        // Do not alter a group that currently affects users outside this administrator's scope.
+        var memberIds = await dbContext.PermissionGroupMemberships.AsNoTracking()
+            .Where(member => member.GroupId == group.Id)
+            .Select(member => member.UserId).ToArrayAsync(cancellationToken);
+        foreach (var memberId in memberIds)
+            await EnsureAuthorizedTeamTargetAsync(request.ActorUserId, memberId, cancellationToken);
+
         var name = NormalizeGroupName(request.Name);
         var description = NormalizeGroupDescription(request.Description);
         var permissions = NormalizePermissions(request.Permissions);

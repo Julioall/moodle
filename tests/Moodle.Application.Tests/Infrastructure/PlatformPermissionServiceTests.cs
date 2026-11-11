@@ -130,6 +130,32 @@ public sealed class PlatformPermissionServiceTests
             sut.AddMemberAsync(new AddPermissionGroupMemberRequest(actorId, group.Id, otherId), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CannotEditGroupContainingUnscopedLegacyMember()
+    {
+        await using var dbContext = CreateContext();
+        var actorId = Guid.NewGuid();
+        var outsiderId = Guid.NewGuid();
+        var sut = new PlatformPermissionService(dbContext);
+        await sut.EnsureDefaultPermissionsAsync(actorId, CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+        {
+            Id = Guid.NewGuid(), UserId = actorId, ChangedByUserId = actorId,
+            Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true
+        });
+        await dbContext.SaveChangesAsync();
+        var group = await sut.CreateGroupAsync(new CreatePermissionGroupRequest(actorId, "Auditoria", "", ["courses.view"]), CancellationToken.None);
+        // Simulate a membership inserted by an older, less restrictive implementation.
+        dbContext.PermissionGroupMemberships.Add(new PermissionGroupMembershipEntity
+        {
+            Id = Guid.NewGuid(), UserId = outsiderId, GroupId = group.Id
+        });
+        await dbContext.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.UpdateGroupAsync(new UpdatePermissionGroupRequest(actorId, group.Id, "Auditoria 2", "", ["students.view"]), CancellationToken.None));
+    }
+
     private static ConnectorDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<ConnectorDbContext>()

@@ -33,8 +33,12 @@ public sealed class TeamAccessServiceTests
         await dbContext.SaveChangesAsync();
         var permissions = new PlatformPermissionService(dbContext);
         await permissions.EnsureDefaultPermissionsAsync(ownerId, CancellationToken.None);
-        var group = await permissions.CreateGroupAsync(new CreatePermissionGroupRequest(ownerId, "Gestão de equipes", "", [PlatformPermissionCatalog.TeamsManage]), CancellationToken.None);
-        await permissions.AddMemberAsync(new AddPermissionGroupMemberRequest(ownerId, group.Id, ownerId), CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+        {
+            Id = Guid.NewGuid(), UserId = ownerId, ChangedByUserId = ownerId,
+            Permission = PlatformPermissionCatalog.TeamsManage, IsAllowed = true
+        });
+        await dbContext.SaveChangesAsync();
         var sut = new TeamAccessService(dbContext, permissions);
         var team = await sut.CreatePersonalTeamAsync(ownerId, "Owner", CancellationToken.None);
         var invitation = await sut.CreateInvitationAsync(
@@ -59,11 +63,21 @@ public sealed class TeamAccessServiceTests
         var memberId = Guid.NewGuid();
         var permissions = new PlatformPermissionService(dbContext);
         await permissions.EnsureDefaultPermissionsAsync(ownerId, CancellationToken.None);
-        var group = await permissions.CreateGroupAsync(new CreatePermissionGroupRequest(ownerId, "Gestão de equipes", "", [PlatformPermissionCatalog.TeamsManage]), CancellationToken.None);
-        await permissions.AddMemberAsync(new AddPermissionGroupMemberRequest(ownerId, group.Id, ownerId), CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+        {
+            Id = Guid.NewGuid(), UserId = ownerId, ChangedByUserId = ownerId,
+            Permission = PlatformPermissionCatalog.TeamsManage, IsAllowed = true
+        });
+        await dbContext.SaveChangesAsync();
         var sut = new TeamAccessService(dbContext, permissions);
         var team = await sut.CreatePersonalTeamAsync(ownerId, "Owner", CancellationToken.None);
         dbContext.TeamMemberships.Add(new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = team.Id, UserId = memberId, Role = "tutor" });
+        // Even an explicit platform TeamsManage grant must not bypass the target team's role.
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+        {
+            Id = Guid.NewGuid(), UserId = memberId, ChangedByUserId = memberId,
+            Permission = PlatformPermissionCatalog.TeamsManage, IsAllowed = true
+        });
         await dbContext.SaveChangesAsync();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>

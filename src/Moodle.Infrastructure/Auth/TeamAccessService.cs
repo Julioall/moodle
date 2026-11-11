@@ -50,6 +50,8 @@ internal sealed class TeamAccessService(
         var inviter = await dbContext.TeamMemberships.FirstOrDefaultAsync(item =>
             item.TeamId == request.TeamId && item.UserId == request.UserId && item.IsActive, cancellationToken)
             ?? throw new InvalidOperationException("Usuário não pertence a esta equipe.");
+        if (!string.Equals(inviter.Role, "administrator", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Somente administradores da equipe podem enviar convites.");
         var effectivePermissions = await platformPermissionService.GetEffectivePermissionsAsync(request.UserId, cancellationToken);
         if (!effectivePermissions.Contains(PlatformPermissionCatalog.TeamsManage, StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException("Usuário não possui permissão para gerenciar equipes.");
