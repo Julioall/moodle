@@ -327,6 +327,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddScoped<IPasswordResetMailer, SmtpPasswordResetMailer>();
         services.AddScoped<IAccountPasswordResetService, AccountPasswordResetService>();
+        services.AddHostedService<PasswordResetTokenCleanupService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<ReportJobArtifactWriter>();
         services.AddScoped<ReportJobClaimer>();
