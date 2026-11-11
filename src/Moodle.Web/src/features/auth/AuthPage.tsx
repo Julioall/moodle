@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,15 @@ export function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(initialParams.get('error') ?? '');
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    // Remove the one-time secret from browser history and referrer-bearing URLs.
+    // The token stays in component memory for this recovery form only.
+    if (!recoveryToken) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('resetToken');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  }, [recoveryToken]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

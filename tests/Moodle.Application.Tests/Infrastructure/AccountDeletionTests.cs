@@ -96,7 +96,7 @@ public sealed class AccountDeletionTests
     }
 
     [Fact]
-    public async Task DeleteAccountsAsAdminAsync_RemovesSelectedAccountDataAndKeepsActor()
+    public async Task DeleteAccountsAsAdminAsync_IsDisabledEvenWithValidActorPassword()
     {
         var options = new DbContextOptionsBuilder<ConnectorDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -166,22 +166,19 @@ public sealed class AccountDeletionTests
         await dbContext.SaveChangesAsync();
 
         var service = new AccountService(dbContext, null!, null!, null!);
-        var result = await service.DeleteAccountsAsAdminAsync(
-            new AdminDeleteAccountsRequest(actorId, [targetId], "senha-admin-123", "APAGAR 1 CONTA"),
-            CancellationToken.None);
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            service.DeleteAccountsAsAdminAsync(
+                new AdminDeleteAccountsRequest(actorId, [targetId], "senha-admin-123", "APAGAR 1 CONTA"),
+                CancellationToken.None));
 
-        Assert.Equal(1, result.DeletedAccounts);
-        Assert.Equal(1, result.DeletedConnections);
-        Assert.Equal(1, result.DeletedTasks);
-        Assert.Equal(1, result.DeletedEvents);
-        Assert.Equal(1, result.DeletedReports);
+        // The target's account and data must survive direct service calls.
         Assert.NotNull(await dbContext.UserAccounts.FindAsync(actorId));
-        Assert.Null(await dbContext.UserAccounts.FindAsync(targetId));
-        Assert.Empty(await dbContext.ConnectorClients.ToListAsync());
-        Assert.Empty(await dbContext.Tasks.ToListAsync());
-        Assert.Empty(await dbContext.CalendarEvents.ToListAsync());
-        Assert.Empty(await dbContext.ReportJobs.ToListAsync());
-        Assert.Equal(artifactBlobKey, (await dbContext.ReportArtifactDeletions.SingleAsync()).ArtifactBlobKey);
+        Assert.NotNull(await dbContext.UserAccounts.FindAsync(targetId));
+        Assert.Single(await dbContext.ConnectorClients.ToListAsync());
+        Assert.Single(await dbContext.Tasks.ToListAsync());
+        Assert.Single(await dbContext.CalendarEvents.ToListAsync());
+        Assert.Single(await dbContext.ReportJobs.ToListAsync());
+        Assert.Empty(await dbContext.ReportArtifactDeletions.ToListAsync());
     }
 
     [Fact]
@@ -202,7 +199,7 @@ public sealed class AccountDeletionTests
         await dbContext.SaveChangesAsync();
         var service = new AccountService(dbContext, null!, null!, null!);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAccountsAsAdminAsync(
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.DeleteAccountsAsAdminAsync(
             new AdminDeleteAccountsRequest(actorId, [actorId], "senha-admin-123", "APAGAR 1 CONTA"),
             CancellationToken.None));
 

@@ -464,69 +464,14 @@ internal sealed class AccountService(
         }
     }
 
-    public async Task<AdminDeleteAccountsResultDto> DeleteAccountsAsAdminAsync(
+    public Task<AdminDeleteAccountsResultDto> DeleteAccountsAsAdminAsync(
         AdminDeleteAccountsRequest request,
         CancellationToken cancellationToken)
     {
-        var requestedIds = request.UserIds?.ToArray() ?? [];
-        if (requestedIds.Length == 0)
-            throw new ArgumentException("Selecione pelo menos uma conta para excluir.", nameof(request.UserIds));
-        if (requestedIds.Length > MaximumAdminAccountDeletionCount)
-            throw new ArgumentException($"É permitido excluir no máximo {MaximumAdminAccountDeletionCount} contas por operação.", nameof(request.UserIds));
-        if (requestedIds.Any(id => id == Guid.Empty) || requestedIds.Distinct().Count() != requestedIds.Length)
-            throw new ArgumentException("A seleção de contas contém identificadores inválidos ou repetidos.", nameof(request.UserIds));
-        if (requestedIds.Contains(request.ActorUserId))
-            throw new InvalidOperationException("A própria conta administrativa não pode ser excluída por este fluxo.");
-
-        var expectedConfirmation = BuildAdminDeleteConfirmation(requestedIds.Length);
-        if (!string.Equals(request.ConfirmationText?.Trim(), expectedConfirmation, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Digite {expectedConfirmation} para confirmar a exclusão definitiva.");
-
-        var actor = await dbContext.UserAccounts.FindAsync([request.ActorUserId], cancellationToken)
-            ?? throw new InvalidOperationException("Sessão administrativa inválida.");
-        if (string.IsNullOrWhiteSpace(request.Password) || !PasswordHasher.Verify(request.Password, actor.PasswordHash))
-            throw new InvalidOperationException("Senha atual do administrador inválida.");
-
-        var accounts = await dbContext.UserAccounts
-            .Where(account => requestedIds.Contains(account.Id))
-            .ToListAsync(cancellationToken);
-        if (accounts.Count != requestedIds.Length)
-            throw new InvalidOperationException("Uma ou mais contas selecionadas não existem mais. Atualize a lista e tente novamente.");
-
-        var transaction = await BeginDeletionTransactionAsync(cancellationToken);
-        var deletedConnections = 0;
-        var deletedTasks = 0;
-        var deletedEvents = 0;
-        var deletedReports = 0;
-        try
-        {
-            foreach (var account in accounts)
-            {
-                var summary = await DeleteAccountDataAsync(account, cancellationToken);
-                deletedConnections += summary.Connections;
-                deletedTasks += summary.Tasks;
-                deletedEvents += summary.Events;
-                deletedReports += summary.Reports;
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            return new AdminDeleteAccountsResultDto(
-                accounts.Count,
-                deletedConnections,
-                deletedTasks,
-                deletedEvents,
-                deletedReports);
-        }
-        catch
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw;
-        }
-        finally
-        {
-            if (transaction is not null) await transaction.DisposeAsync();
-        }
+        // Fail closed at the service boundary as well as the HTTP endpoint.
+        // Deleting a global user would erase data belonging to other institutions.
+        throw new NotSupportedException(
+            "A exclusão administrativa de contas foi desativada até existir autorização por instituição e trilha de auditoria.");
     }
 
     private async Task<AccountDeletionSummary> DeleteAccountDataAsync(
