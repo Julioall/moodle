@@ -40,7 +40,8 @@ public sealed class SmtpPasswordResetMailer(IOptions<PasswordResetOptions> optio
         var opt = options.Value;
         if (!opt.Enabled || !opt.IsReady)
             throw new InvalidOperationException("Serviço de recuperação de senha não configurado.");
-        var link = opt.PublicBaseUrl.TrimEnd('/') + "/?resetToken=" + Uri.EscapeDataString(token);
+        // URL fragments are not transmitted to HTTP servers or reverse-proxy logs.
+        var link = opt.PublicBaseUrl.TrimEnd('/') + "/#resetToken=" + Uri.EscapeDataString(token);
         using var message = new MailMessage(new MailAddress(opt.SenderAddress),
             new MailAddress(destination))
         {

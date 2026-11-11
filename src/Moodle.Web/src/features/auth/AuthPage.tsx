@@ -13,14 +13,15 @@ type AuthMode = 'login' | 'register' | 'moodle' | 'reset-request' | 'reset-compl
 
 export function AuthPage() {
   const initialParams = new URLSearchParams(window.location.search);
-  const initialMode: AuthMode = initialParams.get('resetToken') ? 'reset-complete' : initialParams.get('tab') === 'register' ? 'register' : 'login';
+  const recoveryParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const initialMode: AuthMode = recoveryParams.get('resetToken') ? 'reset-complete' : initialParams.get('tab') === 'register' ? 'register' : 'login';
   const completionUrl = getSafeLocalReturnUrl(initialParams.get('returnUrl')) ?? '/';
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState(initialParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
-  const [recoveryToken] = useState(initialParams.get('resetToken') ?? '');
+  const [recoveryToken] = useState(recoveryParams.get('resetToken') ?? '');
   const [notice, setNotice] = useState('');
   const [moodleAlias, setMoodleAlias] = useState('');
   const [moodleBaseUrl, setMoodleBaseUrl] = useState('');
@@ -35,8 +36,10 @@ export function AuthPage() {
     // The token stays in component memory for this recovery form only.
     if (!recoveryToken) return;
     const url = new URL(window.location.href);
-    url.searchParams.delete('resetToken');
-    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+    hashParams.delete('resetToken');
+    window.history.replaceState(window.history.state, '',
+      url.pathname + url.search + (hashParams.size ? '#' + hashParams.toString() : ''));
   }, [recoveryToken]);
 
   const submit = async (event: FormEvent) => {

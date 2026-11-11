@@ -79,7 +79,7 @@ describe('AuthPage', () => {
   });
 
   it('submits a one-time recovery token', async () => {
-    window.history.replaceState({}, '', '/?resetToken=fixture-token');
+    window.history.replaceState({}, '', '/#resetToken=fixture-token');
     vi.mocked(authGateway.completePasswordReset).mockResolvedValue({ ok: true });
     const user = userEvent.setup();
     render(<AuthPage />);
