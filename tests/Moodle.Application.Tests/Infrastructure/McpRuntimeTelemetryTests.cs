@@ -66,6 +66,8 @@ public sealed class McpRuntimeTelemetryTests
 
         var telemetry = new RecordingTelemetry();
         var permissions = new PlatformPermissionService(db);
+        // Explicitly provision a legitimate read permission: the rollout-wide grant is gone.
+        await permissions.EnsureDefaultPermissionsAsync(accountId, CancellationToken.None);
         var middleware = CreateMiddleware(db, permissions, telemetry);
         var first = await InvokeAsync(middleware);
         Assert.Contains("tool.courses.view", first.Permissions);

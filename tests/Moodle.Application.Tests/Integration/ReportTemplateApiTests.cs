@@ -25,8 +25,10 @@ public class ReportTemplateApiTests
         using var me = await client.GetAsync("/api/account/me");
         using var account = JsonDocument.Parse(await me.Content.ReadAsStringAsync());
         var owner = account.RootElement.GetProperty("id").GetGuid();
-        using var permission = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-        Assert.Equal(HttpStatusCode.OK, permission.StatusCode);
+        // A regular portal account must not grant itself platform admin powers.
+        using var forbiddenGrant = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions",
+            new { permission = "admin.view", isAllowed = true });
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenGrant.StatusCode);
         using var login = await Send(client, HttpMethod.Post, "/api/account/login", new { email, password });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         using var session = JsonDocument.Parse(await client.GetStringAsync("/api/session"));
@@ -77,8 +79,10 @@ public class ReportTemplateApiTests
         Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
         using var me = JsonDocument.Parse(await client.GetStringAsync("/api/account/me"));
         var owner = me.RootElement.GetProperty("id").GetGuid();
-        using var permission = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-        Assert.Equal(HttpStatusCode.OK, permission.StatusCode);
+        // A regular portal account must not grant itself platform admin powers.
+        using var forbiddenGrant = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions",
+            new { permission = "admin.view", isAllowed = true });
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenGrant.StatusCode);
         using var login = await Send(client, HttpMethod.Post, "/api/account/login", new { email, password });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var foreignJob = Guid.NewGuid();
@@ -95,8 +99,18 @@ public class ReportTemplateApiTests
         Assert.Empty(history.RootElement.GetProperty("data").EnumerateArray());
         using var refresh = await Send(client, HttpMethod.Post, "/api/reports/jobs", new { refreshFromJobId = foreignJob });
         Assert.Equal(HttpStatusCode.NotFound, refresh.StatusCode);
-        using var revoke = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = false });
-        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        // Trusted test fixture revokes an ordinary permission without using
+        // an endpoint that deliberately rejects user self-administration.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ConnectorDbContext>();
+            db.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+            {
+                Id = Guid.NewGuid(), UserId = owner, Permission = "reports.view",
+                IsAllowed = false, ChangedByUserId = owner
+            });
+            await db.SaveChangesAsync();
+        }
         using var relogin = await Send(client, HttpMethod.Post, "/api/account/login", new { email, password });
         Assert.Equal(HttpStatusCode.OK, relogin.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/reports/catalog")).StatusCode);

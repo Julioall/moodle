@@ -54,15 +54,15 @@ public sealed class CourseOverviewEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, invalidQuery.StatusCode);
         Assert.Equal("invalid_query", await ReadErrorCodeAsync(invalidQuery));
 
-        await SetPermissionAsync(client, account.Id, "courses.view", allowed: false);
-        await SetPermissionAsync(client, account.Id, "students.view", allowed: false);
+        await SetPermissionAsync(factory, account.Id, "courses.view", allowed: false);
+        await SetPermissionAsync(factory, account.Id, "students.view", allowed: false);
         await LoginAsync(client, account.Email, account.Password);
         var missingPermission = await client.GetAsync("/api/courses/missing/123/overview");
         Assert.Equal(HttpStatusCode.Forbidden, missingPermission.StatusCode);
         Assert.Equal("permission_denied", await ReadErrorCodeAsync(missingPermission));
 
-        await SetPermissionAsync(client, account.Id, "courses.view", allowed: true);
-        await SetPermissionAsync(client, account.Id, "students.view", allowed: true);
+        await SetPermissionAsync(factory, account.Id, "courses.view", allowed: true);
+        await SetPermissionAsync(factory, account.Id, "students.view", allowed: true);
         await LoginAsync(client, account.Email, account.Password);
 
         var missingConnection = await client.GetAsync("/api/courses/missing/123/overview");
@@ -82,7 +82,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         using var firstPage = await GetOverviewAsync(client, "page=1&pageSize=10");
         Assert.True(firstPage.StatusCode == HttpStatusCode.OK,
@@ -127,7 +127,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         var observed = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
         using var listener = new MeterListener();
@@ -161,7 +161,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         var timer = Stopwatch.StartNew();
         var responses = await Task.WhenAll(Enumerable.Range(0, requestCount)
@@ -193,7 +193,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         using var response = await GetOverviewAsync(client, "");
 
@@ -228,7 +228,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         using var response = await GetOverviewAsync(client, "");
 
@@ -254,7 +254,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         using var response = await GetOverviewAsync(client, "");
 
@@ -276,7 +276,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await SetOverviewPermissionsAsync(client, account, canViewGrades: false, canViewReports: true);
+        await SetOverviewPermissionsAsync(factory, account, canViewGrades: false, canViewReports: true);
         await LoginAsync(client, account.Email, account.Password);
 
         using var response = await GetOverviewAsync(client, "");
@@ -299,7 +299,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await SetOverviewPermissionsAsync(client, account, canViewGrades: true, canViewReports: false);
+        await SetOverviewPermissionsAsync(factory, account, canViewGrades: true, canViewReports: false);
         await LoginAsync(client, account.Email, account.Password);
 
         using var response = await GetOverviewAsync(client, "");
@@ -323,8 +323,8 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await SetOverviewPermissionsAsync(client, account, canViewGrades: true, canViewReports: true);
-        await SetPermissionAsync(client, account.Id, deniedPermission, allowed: false);
+        await SetOverviewPermissionsAsync(factory, account, canViewGrades: true, canViewReports: true);
+        await SetPermissionAsync(factory, account.Id, deniedPermission, allowed: false);
         await LoginAsync(client, account.Email, account.Password);
 
         using var response = await GetOverviewAsync(client, "");
@@ -358,7 +358,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         using var response = await client.GetAsync("/api/courses/default/999/overview");
 
@@ -377,7 +377,7 @@ public sealed class CourseOverviewEndpointTests
         var account = await RegisterAsync(client);
         await SetSyntheticConnectorIdAsync(factory, account.Id);
         scenario.Store.OwnerId = account.Id;
-        await AllowOverviewAsync(client, account);
+        await AllowOverviewAsync(factory, client, account);
 
         using var response = await GetOverviewAsync(client, "pageSize=50");
 
@@ -399,7 +399,7 @@ public sealed class CourseOverviewEndpointTests
         using var otherClient = factory.CreateClient();
         var other = await RegisterAsync(otherClient);
         await SetSyntheticConnectorIdAsync(factory, other.Id);
-        await AllowOverviewAsync(otherClient, other);
+        await AllowOverviewAsync(factory, otherClient, other);
 
         using var response = await GetOverviewAsync(otherClient, "");
 
@@ -427,14 +427,32 @@ public sealed class CourseOverviewEndpointTests
         return (accountJson.RootElement.GetProperty("id").GetGuid(), email, password);
     }
 
-    private static async Task SetPermissionAsync(HttpClient client, Guid userId, string permission, bool allowed)
+    private static async Task SetPermissionAsync(
+        CourseOverviewTestWebApplicationFactory factory,
+        Guid userId,
+        string permission,
+        bool allowed)
     {
-        using var response = await SendJsonAsync(
-            client,
-            HttpMethod.Put,
-            $"/api/users/{userId}/platform-permissions",
-            new { permission, isAllowed = allowed });
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // Arrange synthetic grants in this isolated database only. A normal
+        // production account must not self-administer platform permissions.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ConnectorDbContext>();
+        var existing = await db.UserPermissionOverrides.SingleOrDefaultAsync(
+            item => item.UserId == userId && item.Permission == permission);
+        if (existing is null)
+        {
+            db.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+            {
+                Id = Guid.NewGuid(), UserId = userId, Permission = permission,
+                IsAllowed = allowed, ChangedByUserId = userId
+            });
+        }
+        else
+        {
+            existing.IsAllowed = allowed;
+            existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+        await db.SaveChangesAsync();
     }
 
     private static async Task LoginAsync(HttpClient client, string email, string password)
@@ -447,9 +465,9 @@ public sealed class CourseOverviewEndpointTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    private static async Task AllowOverviewAsync(HttpClient client, (Guid Id, string Email, string Password) account)
+    private static async Task AllowOverviewAsync(CourseOverviewTestWebApplicationFactory factory, HttpClient client, (Guid Id, string Email, string Password) account)
     {
-        await SetOverviewPermissionsAsync(client, account, canViewGrades: true, canViewReports: true);
+        await SetOverviewPermissionsAsync(factory, account, canViewGrades: true, canViewReports: true);
         await LoginAsync(client, account.Email, account.Password);
     }
 
@@ -463,15 +481,15 @@ public sealed class CourseOverviewEndpointTests
     }
 
     private static async Task SetOverviewPermissionsAsync(
-        HttpClient client,
+        CourseOverviewTestWebApplicationFactory factory,
         (Guid Id, string Email, string Password) account,
         bool canViewGrades,
         bool canViewReports)
     {
-        await SetPermissionAsync(client, account.Id, "courses.view", allowed: true);
-        await SetPermissionAsync(client, account.Id, "students.view", allowed: true);
-        await SetPermissionAsync(client, account.Id, "grading.view", allowed: canViewGrades);
-        await SetPermissionAsync(client, account.Id, "reports.view", allowed: canViewReports);
+        await SetPermissionAsync(factory, account.Id, "courses.view", allowed: true);
+        await SetPermissionAsync(factory, account.Id, "students.view", allowed: true);
+        await SetPermissionAsync(factory, account.Id, "grading.view", allowed: canViewGrades);
+        await SetPermissionAsync(factory, account.Id, "reports.view", allowed: canViewReports);
     }
 
     private static Task<HttpResponseMessage> GetOverviewAsync(HttpClient client, string query) =>
