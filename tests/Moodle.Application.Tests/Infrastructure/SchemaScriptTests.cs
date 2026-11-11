@@ -5,6 +5,20 @@ namespace Moodle.Application.Tests.Infrastructure;
 public sealed class SchemaScriptTests
 {
     [Fact]
+    public async Task SecurityRolloutRevocationScript_IsRegisteredAndVersioned()
+    {
+        var assemblyDirectory = Path.GetDirectoryName(typeof(ConnectorDbContext).Assembly.Location)
+            ?? throw new InvalidOperationException("Infrastructure assembly directory not found.");
+        var file = Path.Combine(assemblyDirectory, "Database", "Scripts",
+            "085_revoke_legacy_elevated_permissions.sql");
+        Assert.True(File.Exists(file), "Security migration must be copied to published output.");
+        var sql = await File.ReadAllTextAsync(file);
+        Assert.Contains("DELETE FROM user_permission_overrides", sql, StringComparison.Ordinal);
+        Assert.Contains("DELETE FROM permission_group_permissions", sql, StringComparison.Ordinal);
+        Assert.Contains("VALUES (85,", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GradingItemErrorPhaseScript_BackfillsLegacyFailuresWithoutGuessingCause()
     {
         var assemblyDirectory = Path.GetDirectoryName(typeof(ConnectorDbContext).Assembly.Location)

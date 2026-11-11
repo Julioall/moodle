@@ -3367,6 +3367,12 @@ static void ValidateMcpAuthConfiguration(
     string oauthAudience,
     OAuthBrokerOptions oauth)
 {
+    var isDevLike = environment.IsDevelopment() || environment.IsEnvironment("Testing");
+    if (!isDevLike && !security.RequireJwt)
+    {
+        throw new InvalidOperationException("Segurança de Produção: JWT/OAuth é obrigatório no MCP; API key isolada não é suficiente.");
+    }
+
     if (!security.RequireApiKey && !security.RequireJwt)
     {
         throw new InvalidOperationException("Ative pelo menos um metodo de autenticacao MCP (JWT ou API key).");
@@ -3387,7 +3393,6 @@ static void ValidateMcpAuthConfiguration(
         throw new InvalidOperationException("OAuth:Audience ou APP_DOMAIN e obrigatorio quando McpServerSecurity:RequireJwt=true.");
     }
 
-    var isDevLike = environment.IsDevelopment() || environment.IsEnvironment("Testing");
     if (!oauth.RequireHttpsMetadata && !isDevLike)
     {
         throw new InvalidOperationException("OAuth:RequireHttpsMetadata=false so e permitido em Development/Testing.");

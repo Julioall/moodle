@@ -289,18 +289,9 @@ internal sealed class McpRequestSecurityMiddleware(
                 }
                 else
                 {
-                    foreach (var permission in PlatformPermissionCatalog.AllRead)
-                    {
-                        claims.Add(new Claim("platform_permission", permission));
-                    }
-
-                    if (client.CanWrite)
-                    {
-                        foreach (var permission in PlatformPermissionCatalog.AllWrite)
-                        {
-                            claims.Add(new Claim("platform_permission", permission));
-                        }
-                    }
+                    // Legacy/non-user API-key identities have no platform grants.
+                    // Never infer authorization from possession of a connector key.
+                    // Provision a real portal identity and explicit permissions first.
                 }
 
                 context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "connector-api-key"));

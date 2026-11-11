@@ -28,6 +28,12 @@ internal static class PortalAccountEndpoints
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
+            if (!app.Environment.IsDevelopment() &&
+                !app.Environment.IsEnvironment("Testing") &&
+                !app.Configuration.GetValue<bool>("Registration:PublicEnabled"))
+                return Results.Json(new { ok = false, error = "Cadastro público indisponível; solicite acesso à instituição." },
+                    statusCode: StatusCodes.Status403Forbidden);
+
             if (string.IsNullOrWhiteSpace(input.Name) ||
                 string.IsNullOrWhiteSpace(input.Email) ||
                 string.IsNullOrWhiteSpace(input.Password))
