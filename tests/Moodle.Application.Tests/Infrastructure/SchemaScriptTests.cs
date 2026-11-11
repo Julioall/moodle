@@ -4,6 +4,23 @@ namespace Moodle.Application.Tests.Infrastructure;
 
 public sealed class SchemaScriptTests
 {
+    [Theory]
+    [InlineData("015_grant_all_platform_permissions.sql", 15)]
+    [InlineData("016_permission_group_management.sql", 16)]
+    [InlineData("017_revoke_temporary_global_permissions.sql", 17)]
+    [InlineData("020_portal_grading_permissions.sql", 20)]
+    [InlineData("022_restore_portal_navigation_permissions.sql", 22)]
+    [InlineData("085_revoke_legacy_elevated_permissions.sql", 85)]
+    public async Task PrivilegeMigrationsCannotReplayAfterTheirVersionWasRecorded(string name, int version)
+    {
+        var root = Path.GetDirectoryName(typeof(ConnectorDbContext).Assembly.Location)
+            ?? throw new InvalidOperationException("Assembly directory unavailable.");
+        var sql = await File.ReadAllTextAsync(Path.Combine(root, "Database", "Scripts", name));
+        Assert.Contains("IF NOT EXISTS", sql, StringComparison.Ordinal);
+        Assert.Contains($"WHERE \"Version\" = {version}", sql, StringComparison.Ordinal);
+        Assert.Contains("$one_time_privilege_migration$", sql, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task SecurityRolloutRevocationScript_IsRegisteredAndVersioned()
     {
