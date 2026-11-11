@@ -25,7 +25,15 @@ foreach ($rootDocument in @('README.md', 'AGENTS.md')) {
 }
 
 $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
-$mojibakeMarkers = @([char]0x00C3, [char]0x00C2, [char]0xFFFD)
+# Characters U+00C3 (Ã) and U+00C2 (Â) are valid in Portuguese words.
+# Check characteristic two-character mojibake sequences instead.
+$mojibakePattern = '[\u00C3\u00C2][\u0080-\u00BF]|\uFFFD'
+# Regression guard: do not reject valid Portuguese uppercase accented words.
+if ('NÃO' -match $mojibakePattern -or 'VALIDAÇÃO' -match $mojibakePattern -or
+    'Ã£' -notmatch $mojibakePattern -or 'Â©' -notmatch $mojibakePattern -or
+    ([string][char]0xFFFD) -notmatch $mojibakePattern) {
+    throw 'Mojibake detector self-check failed.'
+}
 $failures = [System.Collections.Generic.List[string]]::new()
 $checkedLinks = 0
 $removedDocumentationPaths = @(
@@ -55,11 +63,8 @@ foreach ($file in $files | Sort-Object FullName -Unique) {
         continue
     }
 
-    foreach ($marker in $mojibakeMarkers) {
-        if ($content.Contains($marker)) {
-            $failures.Add("$($file.FullName): possível mojibake ou caractere de substituição U+$('{0:X4}' -f [int][char]$marker).")
-            break
-        }
+    if ($content -match $mojibakePattern) {
+        $failures.Add("$($file.FullName): possível sequência de mojibake ou caractere de substituição: '$($Matches[0])'.")
     }
 
     if ($content -match '(?i)(?<![\w/])TODO\.md(?![\w])') {
