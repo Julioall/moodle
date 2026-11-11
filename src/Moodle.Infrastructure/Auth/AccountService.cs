@@ -446,6 +446,14 @@ internal sealed class AccountService(
         if (string.IsNullOrWhiteSpace(request.Password) || !PasswordHasher.Verify(request.Password, account.PasswordHash))
             throw new InvalidOperationException("Senha atual inválida.");
 
+        // A global account may participate in multiple academic institutions.
+        // A personal deletion cannot silently erase institutional obligations.
+        var hasInstitutionalMembership = await dbContext.TeamMemberships.AsNoTracking()
+            .AnyAsync(member => member.UserId == account.Id && member.IsActive &&
+                dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal), cancellationToken);
+        if (hasInstitutionalMembership)
+            throw new InvalidOperationException("Conta vinculada a uma instituição: a baixa deve passar pelo procedimento institucional de desvinculação.");
+
         var transaction = await BeginDeletionTransactionAsync(cancellationToken);
         try
         {

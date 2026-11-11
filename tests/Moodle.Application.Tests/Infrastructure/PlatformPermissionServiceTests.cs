@@ -27,8 +27,13 @@ public sealed class PlatformPermissionServiceTests
         dbContext.TeamMemberships.Add(new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = teamId, UserId = userId, Role = "member" });
         await dbContext.SaveChangesAsync();
         var group = await sut.CreateGroupAsync(new CreatePermissionGroupRequest(adminId, "Correção", "", ["tool.assignments.grade"]), CancellationToken.None);
+        var stampBeforeMembership = (await dbContext.UserAccounts.SingleAsync(item => item.Id == userId)).SecurityStamp;
         await sut.AddMemberAsync(new AddPermissionGroupMemberRequest(adminId, group.Id, userId), CancellationToken.None);
+        var stampAfterMembership = (await dbContext.UserAccounts.SingleAsync(item => item.Id == userId)).SecurityStamp;
+        Assert.NotEqual(stampBeforeMembership, stampAfterMembership);
         await sut.SetUserPermissionAsync(new SetUserPermissionRequest(adminId, userId, "tool.assignments.grade", false), CancellationToken.None);
+        Assert.NotEqual(stampAfterMembership,
+            (await dbContext.UserAccounts.SingleAsync(item => item.Id == userId)).SecurityStamp);
 
         var permissions = await sut.GetEffectivePermissionsAsync(userId, CancellationToken.None);
 

@@ -3390,6 +3390,11 @@ static void ValidateMcpAuthConfiguration(
     {
         throw new InvalidOperationException("Segurança de Produção: JWT/OAuth é obrigatório no MCP; API key isolada não é suficiente.");
     }
+    if (!isDevLike && security.RequireApiKey)
+    {
+        // Otherwise a valid API key bypasses the JWT branch in the MCP middleware.
+        throw new InvalidOperationException("Segurança de Produção: desative RequireApiKey no MCP e utilize autenticação OAuth/JWT.");
+    }
 
     if (!security.RequireApiKey && !security.RequireJwt)
     {

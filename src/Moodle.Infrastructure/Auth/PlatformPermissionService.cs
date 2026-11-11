@@ -135,6 +135,7 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
         {
             Id = Guid.NewGuid(), GroupId = group.Id, Permission = permission
         }));
+        await RotateSecurityStampsAsync(memberIds, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return new PermissionGroupDto(group.Id, group.Name, group.Description, permissions);
     }
@@ -157,6 +158,7 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
             {
                 Id = Guid.NewGuid(), GroupId = request.GroupId, UserId = request.UserId
             });
+            await RotateSecurityStampsAsync([request.UserId], cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
     }
@@ -168,6 +170,8 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
         if (!effective.Contains("admin.view", StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException("Somente administradores explicitamente autorizados podem modificar permissões individuais.");
         await EnsureAuthorizedTeamTargetAsync(request.ActorUserId, request.UserId, cancellationToken);
+        if (!await dbContext.UserAccounts.AnyAsync(item => item.Id == request.UserId, cancellationToken))
+            throw new InvalidOperationException("Conta de destino não encontrada.");
         var permission = NormalizePermission(request.Permission);
         if (request.IsAllowed && !effective.Contains(permission, StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException("Não é permitido conceder permissões que o solicitante não possui.");
@@ -184,6 +188,7 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
             existing.ChangedByUserId = request.ActorUserId;
             existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
+        await RotateSecurityStampsAsync([request.UserId], cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -215,6 +220,19 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
             })
             .OrderBy(group => group.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private async Task RotateSecurityStampsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0) return;
+        var accounts = await dbContext.UserAccounts
+            .Where(account => userIds.Contains(account.Id)).ToArrayAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var account in accounts)
+        {
+            account.SecurityStamp = Guid.NewGuid();
+            account.UpdatedAtUtc = now;
+        }
     }
 
     private async Task EnsureCanGrantPermissionsAsync(Guid actorUserId, IEnumerable<string> permissions, CancellationToken cancellationToken)

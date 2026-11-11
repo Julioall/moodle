@@ -69,6 +69,36 @@ public sealed class AccountDeletionTests
         Assert.Equal(selfDeleteArtifactKey, (await dbContext.ReportArtifactDeletions.SingleAsync()).ArtifactBlobKey);
     }
 
+    [Fact]
+    public async Task DeleteAccountAsync_RefusesToRemoveAnInstitutionallyLinkedAccount()
+    {
+        await using var db = new ConnectorDbContext(new DbContextOptionsBuilder<ConnectorDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options);
+        var owner = Guid.NewGuid();
+        var institution = Guid.NewGuid();
+        db.UserAccounts.Add(new UserAccountEntity
+        {
+            Id = owner, Name = "Tutor de duas instituições", Email = "tutor@example.test",
+            PasswordHash = PasswordHasher.Hash("senha-segura-123")
+        });
+        db.Teams.Add(new TeamEntity
+        {
+            Id = institution, Name = "Instituição A", CreatedByUserId = owner, IsPersonal = false
+        });
+        db.TeamMemberships.Add(new TeamMembershipEntity
+        {
+            Id = Guid.NewGuid(), TeamId = institution, UserId = owner,
+            Role = "administrator", IsActive = true
+        });
+        await db.SaveChangesAsync();
+        var service = new AccountService(db, null!, null!, null!);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAccountAsync(
+            new DeleteAccountRequest(owner, "senha-segura-123", "EXCLUIR MINHA CONTA"),
+            CancellationToken.None));
+        Assert.True(await db.UserAccounts.AnyAsync(item => item.Id == owner));
+        Assert.True(await db.TeamMemberships.AnyAsync(item => item.UserId == owner && item.IsActive));
+    }
+
     [Theory]
     [InlineData("senha-incorreta", "EXCLUIR MINHA CONTA")]
     [InlineData("senha-segura-123", "excluir minha conta")]

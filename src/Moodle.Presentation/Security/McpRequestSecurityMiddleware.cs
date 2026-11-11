@@ -35,10 +35,24 @@ internal sealed class McpPrincipalEnricher(
         var email = principal.FindFirstValue(ClaimTypes.Email)
             ?? principal.FindFirstValue("email")
             ?? principal.FindFirstValue("preferred_username");
-        if (string.IsNullOrWhiteSpace(email) || principal.Identity is not ClaimsIdentity identity)
+        if (principal.Identity is not ClaimsIdentity identity)
+            return;
+
+        // Only a real, locally bound OAuth subject can authorize production MCP
+        // requests, even when the token was signed before account deletion.
+        var productionMcp = context.Request.Path.StartsWithSegments(McpRequestSecurityMiddleware.McpPath) &&
+            context.RequestServices.GetService<IHostEnvironment>()?.IsEnvironment("Testing") != true;
+        if (productionMcp && (string.IsNullOrWhiteSpace(email) ||
+                              !Guid.TryParse(principal.FindFirstValue("sub"), out _)))
         {
+            foreach (var claim in identity.FindAll("connector_client_id")
+                         .Concat(identity.FindAll("platform_permission"))
+                         .Concat(identity.FindAll("platform_permission_deny"))
+                         .Concat(identity.FindAll("team_id")).ToArray())
+                identity.RemoveClaim(claim);
             return;
         }
+        if (string.IsNullOrWhiteSpace(email)) return;
 
         // Synthetic transport test fixtures use externally signed, non-GUID
         // subjects. Production must never trust them without a local account.
