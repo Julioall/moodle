@@ -57,6 +57,11 @@ internal static class OAuthAuthorizationEndpoints
             claims.SetClaim(OpenIddictConstants.Claims.Subject, identity.Id.ToString());
             claims.SetClaim(OpenIddictConstants.Claims.Name, identity.Name);
             claims.SetClaim(OpenIddictConstants.Claims.Email, identity.Email);
+            var securityStamp = await dbContext.UserAccounts.AsNoTracking()
+                .Where(account => account.Id == identity.Id)
+                .Select(account => account.SecurityStamp)
+                .SingleAsync(cancellationToken);
+            claims.SetClaim("account_security_stamp", securityStamp.ToString("N"));
             claims.SetClaim(
                 "connector_client_id",
                 string.IsNullOrWhiteSpace(identity.ConnectorClientId)

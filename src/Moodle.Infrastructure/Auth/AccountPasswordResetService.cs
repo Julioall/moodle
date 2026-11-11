@@ -132,6 +132,7 @@ public sealed class AccountPasswordResetService(
 
         row.ConsumedAtUtc = now; // EF concurrency token ensures one-time redemption.
         account.PasswordHash = PasswordHasher.Hash(newPassword);
+        account.SecurityStamp = Guid.NewGuid();
         account.UpdatedAtUtc = now;
         account.ApiKeyEncrypted = null;
 

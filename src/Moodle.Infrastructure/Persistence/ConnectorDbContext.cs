@@ -106,6 +106,7 @@ public sealed class ConnectorDbContext(DbContextOptions<ConnectorDbContext> opti
         userEntity.Property(x => x.Name).HasMaxLength(200).IsRequired();
         userEntity.Property(x => x.Email).HasMaxLength(320).IsRequired();
         userEntity.Property(x => x.PasswordHash).IsRequired();
+        userEntity.Property(x => x.SecurityStamp).IsRequired();
         userEntity.Property(x => x.ConnectorClientId).HasMaxLength(64);
         userEntity.Property(x => x.CreatedAtUtc).IsRequired();
         userEntity.Property(x => x.UpdatedAtUtc).IsRequired();

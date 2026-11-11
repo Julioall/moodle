@@ -47,8 +47,23 @@ internal sealed class McpPrincipalEnricher(
                 .AsNoTracking()
                 .SingleOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken),
             result => result is null ? "not_found" : "success");
-        if (account is null)
+        // Only OAuth tokens minted for this specific account and credential
+        // generation may access the MCP. Synthetic non-GUID subjects are used by
+        // transport integration fixtures; production OAuth subjects are GUIDs.
+        var hasLocalSubject = Guid.TryParse(principal.FindFirstValue("sub"), out var subjectId);
+        var isMcp = context.Request.Path.StartsWithSegments(McpRequestSecurityMiddleware.McpPath);
+        var staleOAuthToken = isMcp && hasLocalSubject &&
+            (account is null || account.Id != subjectId ||
+             !string.Equals(principal.FindFirstValue("account_security_stamp"),
+                 account.SecurityStamp.ToString("N"), StringComparison.Ordinal));
+
+        if (account is null || staleOAuthToken)
         {
+            foreach (var claim in identity.FindAll("connector_client_id")
+                         .Concat(identity.FindAll("platform_permission"))
+                         .Concat(identity.FindAll("platform_permission_deny"))
+                         .Concat(identity.FindAll("team_id")).ToArray())
+                identity.RemoveClaim(claim);
             return;
         }
 

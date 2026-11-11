@@ -81,6 +81,7 @@ internal sealed class AccountService(
 
         ValidatePassword(request.NewPassword);
         account.PasswordHash = PasswordHasher.Hash(request.NewPassword);
+        account.SecurityStamp = Guid.NewGuid();
         account.UpdatedAtUtc = DateTimeOffset.UtcNow;
         account.ApiKeyEncrypted = null;
         var clientId = account.ConnectorClientId ?? account.Id.ToString();

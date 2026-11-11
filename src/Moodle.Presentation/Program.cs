@@ -344,11 +344,13 @@ builder.Services
                 return;
             }
             var db = context.HttpContext.RequestServices.GetRequiredService<ConnectorDbContext>();
-            var lastUpdated = await db.UserAccounts.AsNoTracking()
+            var accountState = await db.UserAccounts.AsNoTracking()
                 .Where(item => item.Id == accountId)
-                .Select(item => (DateTimeOffset?)item.UpdatedAtUtc)
+                .Select(item => new { item.UpdatedAtUtc, item.SecurityStamp })
                 .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
-            if (lastUpdated is null || lastUpdated > issued.Value)
+            var cookieStamp = context.Principal?.FindFirstValue("account_security_stamp");
+            if (accountState is null || accountState.UpdatedAtUtc > issued.Value ||
+                !string.Equals(cookieStamp, accountState.SecurityStamp.ToString("N"), StringComparison.Ordinal))
                 context.RejectPrincipal();
         };
     })

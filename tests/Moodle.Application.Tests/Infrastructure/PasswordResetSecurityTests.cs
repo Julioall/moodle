@@ -34,6 +34,7 @@ public sealed class PasswordResetSecurityTests
         var sut = MakeService(db, mailer);
 
         await sut.RequestAsync("tutor@example.test", CancellationToken.None);
+        var previousStamp = (await db.UserAccounts.SingleAsync()).SecurityStamp;
         var reset = await db.PasswordResetTokens.SingleAsync();
         Assert.NotEqual(mailer.Token, reset.TokenHash);
         Assert.Equal(64, reset.TokenHash.Length);
@@ -41,6 +42,7 @@ public sealed class PasswordResetSecurityTests
         Assert.True(await sut.CompleteAsync(mailer.Token, "new-password", CancellationToken.None));
         Assert.True(PasswordHasher.Verify("new-password", (await db.UserAccounts.SingleAsync()).PasswordHash));
         Assert.Null((await db.UserAccounts.SingleAsync()).ApiKeyEncrypted);
+        Assert.NotEqual(previousStamp, (await db.UserAccounts.SingleAsync()).SecurityStamp);
         Assert.False(await sut.CompleteAsync(mailer.Token, "another-password", CancellationToken.None));
     }
 
