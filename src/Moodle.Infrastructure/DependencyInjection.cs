@@ -186,8 +186,12 @@ public static class DependencyInjection
         services.AddHostedService(sp => sp.GetRequiredService<MoodleSnapshotSyncQueue>());
         services.AddPolicyRegistry();
         services.AddSingleton<IMoodleEndpointValidator, MoodleEndpointValidator>();
-        services.AddSingleton<IPedagogicGuidanceSearch>(_ =>
-            new MarkdownPedagogicGuidanceSearch(Path.Combine(AppContext.BaseDirectory, "public", "pedagogic")));
+        // Institutional guides are not bundled in the public image. An approved
+        // licensed corpus may be mounted separately in a private directory.
+        services.AddSingleton<IPedagogicGuidanceSearch>(sp =>
+            new MarkdownPedagogicGuidanceSearch(
+                sp.GetRequiredService<IConfiguration>()["PedagogicGuidance:RootPath"]
+                ?? Path.Combine(AppContext.BaseDirectory, "data", "private-pedagogic")));
         services.AddScoped<IPendingMoodleActionRepository, PendingMoodleActionRepository>();
         services.AddScoped<GradingReviewRepository>();
         services.AddScoped<IGradingReviewRepository>(sp => sp.GetRequiredService<GradingReviewRepository>());

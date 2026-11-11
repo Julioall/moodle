@@ -16,7 +16,6 @@ COPY src/Moodle.Presentation/Moodle.Presentation.csproj src/Moodle.Presentation/
 RUN dotnet restore src/Moodle.Presentation/Moodle.Presentation.csproj
 
 COPY src/ src/
-COPY public/ public/
 COPY --from=web-build /web/dist/ src/Moodle.Presentation/wwwroot/
 
 RUN dotnet publish src/Moodle.Presentation/Moodle.Presentation.csproj \
