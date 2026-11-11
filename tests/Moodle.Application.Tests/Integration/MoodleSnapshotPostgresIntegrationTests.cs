@@ -408,7 +408,7 @@ public sealed class ConnectorDbContextSchemaInitializerPostgresTests
                 await connection.OpenAsync();
                 await using var command = connection.CreateCommand();
                 command.CommandText = "SELECT MAX(\"Version\") FROM \"MOODLE_schema_versions\"";
-                Assert.Equal(84, Convert.ToInt32(await command.ExecuteScalarAsync()));
+                Assert.Equal(87, Convert.ToInt32(await command.ExecuteScalarAsync()));
 
                 command.CommandText = """
                     ALTER TABLE report_jobs

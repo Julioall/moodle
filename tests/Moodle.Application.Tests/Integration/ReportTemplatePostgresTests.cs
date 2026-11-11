@@ -147,10 +147,13 @@ public sealed class ReportTemplatePostgresTests
             }
             var owner = Guid.NewGuid();
             var jobId = Guid.NewGuid();
-            db.UserAccounts.Add(new UserAccountEntity { Id = owner, Name = "Synthetic upgrade owner",
-                Email = $"{owner:N}@integration.test", PasswordHash = "synthetic", ConnectorClientId = $"test-{owner:N}" });
-            await db.SaveChangesAsync();
+            // The v73 database predates the SecurityStamp column (introduced in v87).
+            // Seed with the historical SQL schema, not the current EF entity mapping.
             var now = DateTimeOffset.UtcNow;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO user_accounts ("Id","Name","Email","PasswordHash","ConnectorClientId","CreatedAtUtc","UpdatedAtUtc")
+                VALUES ({owner},'Synthetic upgrade owner',{$"{owner:N}@integration.test"},'synthetic',{$"test-{owner:N}"},{now},{now})
+                """);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO report_jobs ("Id","OwnerId","ClientId","ConnectionAlias","ReportType","ScopeType","Status","ContentText","FileName","ContentType","RequestedAt","UpdatedAt")
                 VALUES ({jobId},{owner},{$"test-{owner:N}"},'synthetic','grades','course','completed','synthetic legacy artifact','synthetic.txt','text/plain',{now},{now})
