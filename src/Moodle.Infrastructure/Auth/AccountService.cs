@@ -82,6 +82,17 @@ internal sealed class AccountService(
         ValidatePassword(request.NewPassword);
         account.PasswordHash = PasswordHasher.Hash(request.NewPassword);
         account.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        account.ApiKeyEncrypted = null;
+        var clientId = account.ConnectorClientId ?? account.Id.ToString();
+        foreach (var client in await dbContext.ConnectorClients
+            .Where(item => item.ClientId == clientId).ToListAsync(cancellationToken))
+            client.ApiKeyHash = null;
+        foreach (var token in await dbContext.OAuthTokens
+            .Where(item => item.Subject == account.Id.ToString()).ToListAsync(cancellationToken))
+            token.Status = "revoked";
+        foreach (var token in await dbContext.PasswordResetTokens
+            .Where(item => item.UserId == account.Id && item.ConsumedAtUtc == null).ToListAsync(cancellationToken))
+            token.ConsumedAtUtc = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -522,6 +533,9 @@ internal sealed class AccountService(
         CancellationToken cancellationToken)
     {
         var clientId = account.ConnectorClientId ?? account.Id.ToString();
+        var resetTokens = await dbContext.PasswordResetTokens
+            .Where(item => item.UserId == account.Id).ToArrayAsync(cancellationToken);
+        dbContext.PasswordResetTokens.RemoveRange(resetTokens);
         var subjects = new[] { account.Id.ToString(), clientId }.Distinct().ToArray();
 
         var taskIds = (await dbContext.Tasks.AsNoTracking()

@@ -334,6 +334,23 @@ builder.Services
         options.ExpireTimeSpan = TimeSpan.FromHours(12);
         options.LoginPath = "/auth/login";
         options.LogoutPath = "/auth/logout";
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var subject = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var issued = context.Properties.IssuedUtc;
+            if (!Guid.TryParse(subject, out var accountId) || issued is null)
+            {
+                context.RejectPrincipal();
+                return;
+            }
+            var db = context.HttpContext.RequestServices.GetRequiredService<ConnectorDbContext>();
+            var lastUpdated = await db.UserAccounts.AsNoTracking()
+                .Where(item => item.Id == accountId)
+                .Select(item => (DateTimeOffset?)item.UpdatedAtUtc)
+                .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+            if (lastUpdated is null || lastUpdated > issued.Value)
+                context.RejectPrincipal();
+        };
     })
     .AddJwtBearer(options =>
     {

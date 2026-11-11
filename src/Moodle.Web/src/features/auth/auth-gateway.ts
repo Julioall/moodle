@@ -30,4 +30,7 @@ export const authGateway = {
   login: (email: string, password: string) => accountRequest('/api/account/login', { email, password }),
   register: (name: string, email: string, password: string) => accountRequest('/api/account/register', { name, email, password }),
   connectMoodle: (input: MoodleBootstrapInput) => accountRequest('/api/account/connect-moodle', input),
+  requestPasswordReset: (email: string) => accountRequest('/api/account/password-reset/request', { email }),
+  completePasswordReset: (token: string, newPassword: string) =>
+    accountRequest('/api/account/password-reset/complete', { token, newPassword }),
 };
