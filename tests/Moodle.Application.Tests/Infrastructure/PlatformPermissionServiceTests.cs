@@ -16,6 +16,16 @@ public sealed class PlatformPermissionServiceTests
         await dbContext.SaveChangesAsync();
         var sut = new PlatformPermissionService(dbContext);
         await sut.EnsureDefaultPermissionsAsync(adminId, CancellationToken.None);
+        dbContext.UserPermissionOverrides.AddRange(
+            new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = adminId, ChangedByUserId = adminId, Permission = "admin.view", IsAllowed = true },
+            new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = adminId, ChangedByUserId = adminId, Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true },
+            new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = adminId, ChangedByUserId = adminId, Permission = "tool.assignments.grade", IsAllowed = true });
+        dbContext.UserAccounts.Add(new UserAccountEntity { Id = userId, Name = "Aluno", Email = "aluno@example.test", PasswordHash = "placeholder" });
+        var teamId = Guid.NewGuid();
+        dbContext.Teams.Add(new TeamEntity { Id = teamId, Name = "Equipe", CreatedByUserId = adminId, IsPersonal = false });
+        dbContext.TeamMemberships.Add(new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = teamId, UserId = adminId, Role = "administrator" });
+        dbContext.TeamMemberships.Add(new TeamMembershipEntity { Id = Guid.NewGuid(), TeamId = teamId, UserId = userId, Role = "member" });
+        await dbContext.SaveChangesAsync();
         var group = await sut.CreateGroupAsync(new CreatePermissionGroupRequest(adminId, "Correção", "", ["tool.assignments.grade"]), CancellationToken.None);
         await sut.AddMemberAsync(new AddPermissionGroupMemberRequest(adminId, group.Id, userId), CancellationToken.None);
         await sut.SetUserPermissionAsync(new SetUserPermissionRequest(adminId, userId, "tool.assignments.grade", false), CancellationToken.None);
@@ -26,7 +36,7 @@ public sealed class PlatformPermissionServiceTests
     }
 
     [Fact]
-    public async Task NewUserReceivesTheCompleteTemporaryPermissionCatalog()
+    public async Task NewUserReceivesOnlyPersonalBaseline()
     {
         await using var dbContext = CreateContext();
         var userId = Guid.NewGuid();
@@ -36,7 +46,9 @@ public sealed class PlatformPermissionServiceTests
 
         var permissions = await sut.GetEffectivePermissionsAsync(userId, CancellationToken.None);
 
-        Assert.Equal(PlatformPermissionCatalog.TemporaryRollout.Order(StringComparer.Ordinal), permissions.Order(StringComparer.Ordinal));
+        Assert.Equal(PlatformPermissionCatalog.DefaultPersonalAccess.Order(StringComparer.Ordinal), permissions.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("admin.view", permissions);
+        Assert.DoesNotContain(PlatformPermissionCatalog.PermissionGroupsManage, permissions);
         var groups = await sut.GetGroupsAsync(userId, CancellationToken.None);
         Assert.Equal(["Acesso inicial", "Monitor", "Tutor"], groups.Select(group => group.Name));
     }
@@ -49,6 +61,8 @@ public sealed class PlatformPermissionServiceTests
         var sut = new PlatformPermissionService(dbContext);
 
         await sut.EnsureDefaultPermissionsAsync(userId, CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = userId, ChangedByUserId = userId, Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true });
+        await dbContext.SaveChangesAsync();
         var tutor = (await sut.GetGroupsAsync(userId, CancellationToken.None)).Single(group => group.Name == "Tutor");
 
         var updated = await sut.UpdateGroupAsync(
@@ -58,7 +72,7 @@ public sealed class PlatformPermissionServiceTests
         Assert.Equal("Tutor personalizado", updated.Name);
         Assert.Equal("Acompanhamento personalizado", updated.Description);
         Assert.Equal(["courses.view"], updated.Permissions);
-        Assert.Equal(PlatformPermissionCatalog.TemporaryRollout.Order(StringComparer.Ordinal), (await sut.GetEffectivePermissionsAsync(userId, CancellationToken.None)).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("admin.view", await sut.GetEffectivePermissionsAsync(userId, CancellationToken.None));
 
         await sut.EnsureDefaultPermissionsAsync(userId, CancellationToken.None);
 
@@ -76,9 +90,44 @@ public sealed class PlatformPermissionServiceTests
         await dbContext.SaveChangesAsync();
         var sut = new PlatformPermissionService(dbContext);
         await sut.EnsureDefaultPermissionsAsync(adminId, CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = adminId, ChangedByUserId = adminId, Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true });
+        await dbContext.SaveChangesAsync();
 
         await Assert.ThrowsAsync<ArgumentException>(() => sut.CreateGroupAsync(
             new CreatePermissionGroupRequest(adminId, "Invalid", "", ["moodle.admin"]), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManagerCannotSelfElevateToAdmin()
+    {
+        await using var dbContext = CreateContext();
+        var userId = Guid.NewGuid();
+        var sut = new PlatformPermissionService(dbContext);
+        await sut.EnsureDefaultPermissionsAsync(userId, CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = userId, ChangedByUserId = userId, Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true });
+        await dbContext.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.SetUserPermissionAsync(new SetUserPermissionRequest(userId, userId, "admin.view", true), CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.CreateGroupAsync(new CreatePermissionGroupRequest(userId, "Admin", "", ["admin.view"]), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManagerCannotAddAccountOutsideTheirInstitution()
+    {
+        await using var dbContext = CreateContext();
+        var actorId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var sut = new PlatformPermissionService(dbContext);
+        await sut.EnsureDefaultPermissionsAsync(actorId, CancellationToken.None);
+        dbContext.UserAccounts.Add(new UserAccountEntity { Id = otherId, Name = "Outro", Email = "outro@example.test", PasswordHash = "placeholder" });
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity { Id = Guid.NewGuid(), UserId = actorId, ChangedByUserId = actorId, Permission = PlatformPermissionCatalog.PermissionGroupsManage, IsAllowed = true });
+        await dbContext.SaveChangesAsync();
+        var group = await sut.CreateGroupAsync(new CreatePermissionGroupRequest(actorId, "Cursos", "", ["courses.view"]), CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.AddMemberAsync(new AddPermissionGroupMemberRequest(actorId, group.Id, otherId), CancellationToken.None));
     }
 
     private static ConnectorDbContext CreateContext()

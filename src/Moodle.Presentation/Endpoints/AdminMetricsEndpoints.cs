@@ -11,11 +11,15 @@ internal static class AdminMetricsEndpoints
             int? hours,
             HttpContext context,
             ConnectorDbContext dbContext,
+            Moodle.Application.Abstractions.IPlatformPermissionService permissionService,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
-            if (await PortalEndpointAuthorization.ResolveAppIdentityAsync(context, dbContext, cancellationToken) is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
+            var identity = await PortalEndpointAuthorization.ResolveAppIdentityAsync(context, dbContext, cancellationToken);
+            if (identity is null) return Results.Unauthorized();
+            var permissions = await permissionService.GetEffectivePermissionsAsync(identity.Id, cancellationToken);
+            if (!permissions.Contains(AppPermissionCatalog.AdminView, StringComparer.OrdinalIgnoreCase) ||
+                !permissions.Contains(PlatformPermissionCatalog.TeamsManage, StringComparer.OrdinalIgnoreCase)) return Results.Forbid();
 
             var periodHours = Math.Clamp(hours ?? 168, 1, 24 * 30);
             var generatedAt = DateTimeOffset.UtcNow;

@@ -92,68 +92,26 @@ internal static class PortalAccountEndpoints
             HttpContext context,
             ConnectorDbContext dbContext,
             IAccountService accountService,
-            CancellationToken cancellationToken) =>
-        {
-            if (await ResolveAppIdentityAsync(context, dbContext, cancellationToken) is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
-            context.Response.Headers.CacheControl = "no-store";
-            return Results.Ok(new { ok = true, accounts = await accountService.ListAccountsAsync(cancellationToken) });
-        }).RequireRateLimiting(rateLimitPolicy);
-
-        app.MapPost("/api/admin/accounts/{userId:guid}/reset-password", async (
-            Guid userId,
-            HttpContext context,
-            ConnectorDbContext dbContext,
-            IAccountService accountService,
-            IAntiforgery antiforgery,
-            CancellationToken cancellationToken) =>
-        {
-            if (await ResolveAppIdentityAsync(context, dbContext, cancellationToken) is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
-            await antiforgery.ValidateRequestAsync(context);
-            try
-            {
-                await accountService.ResetPasswordToDefaultAsync(userId, cancellationToken);
-                return Results.Ok(new { ok = true, message = "Senha redefinida para a senha padrão configurada." });
-            }
-            catch (ArgumentException ex) { return Results.BadRequest(new { ok = false, error = ex.Message }); }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { ok = false, error = ex.Message }); }
-        }).RequireRateLimiting(rateLimitPolicy);
-
-        app.MapPost("/api/admin/accounts/delete", async (
-            AdminDeleteAccountsInput input,
-            HttpContext context,
-            ConnectorDbContext dbContext,
-            IAccountService accountService,
-            IAntiforgery antiforgery,
+            IPlatformPermissionService platformPermissionService,
             CancellationToken cancellationToken) =>
         {
             var identity = await ResolveAppIdentityAsync(context, dbContext, cancellationToken);
             if (identity is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
-            await antiforgery.ValidateRequestAsync(context);
-
-            try
-            {
-                var result = await accountService.DeleteAccountsAsAdminAsync(
-                    new AdminDeleteAccountsRequest(
-                        identity.Id,
-                        input.UserIds ?? [],
-                        input.Password,
-                        input.ConfirmationText),
-                    cancellationToken);
-                context.Response.Headers.CacheControl = "no-store";
-                return Results.Ok(new { ok = true, result });
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new { ok = false, error = ex.Message });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { ok = false, error = ex.Message });
-            }
+            var permissions = await platformPermissionService.GetEffectivePermissionsAsync(identity.Id, cancellationToken);
+            if (!permissions.Contains(AppPermissionCatalog.AdminView, StringComparer.OrdinalIgnoreCase)) return Results.Forbid();
+            context.Response.Headers.CacheControl = "no-store";
+            return Results.Ok(new { ok = true, accounts = await accountService.ListAccountsAsync(identity.Id, cancellationToken) });
         }).RequireRateLimiting(rateLimitPolicy);
+
+        // Intentionally disabled: resetting accounts to a shared password is unsafe.
+        app.MapPost("/api/admin/accounts/{userId:guid}/reset-password", () =>
+            Results.Json(new { ok = false, error = "Redefinição por senha compartilhada desativada." },
+                statusCode: StatusCodes.Status410Gone)).RequireRateLimiting(rateLimitPolicy);
+
+        // Deleting an entire account may erase data belonging to multiple institutions.
+        app.MapPost("/api/admin/accounts/delete", () =>
+            Results.Json(new { ok = false, error = "Exclusão administrativa em massa desativada até existir isolamento institucional." },
+                statusCode: StatusCodes.Status410Gone)).RequireRateLimiting(rateLimitPolicy);
 
         app.MapPost("/api/account/login", async (
             LoginInput input,

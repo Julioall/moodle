@@ -91,32 +91,9 @@ internal static class PortalEndpointAuthorization
             return false;
         }
 
-        if ((string.Equals(permission, AppPermissionCatalog.SettingsView, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(permission, AppPermissionCatalog.AdminView, StringComparison.OrdinalIgnoreCase)) &&
-            HasPlatformToolPermission(context.User, PlatformPermissionCatalog.PermissionGroupsManage))
-        {
-            return true;
-        }
-
         return context.User.FindAll("platform_permission")
             .Any(x => string.Equals(x.Value, permission, StringComparison.OrdinalIgnoreCase) ||
                       (platformPermission is not null && string.Equals(x.Value, platformPermission, StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static bool HasPlatformToolPermission(ClaimsPrincipal? principal, string permission)
-    {
-        if (principal is null)
-        {
-            return false;
-        }
-
-        if (principal.FindAll("platform_permission_deny")
-            .Any(x => string.Equals(x.Value, permission, StringComparison.OrdinalIgnoreCase)))
-        {
-            return false;
-        }
-
-        return principal.FindAll("platform_permission")
-            .Any(x => string.Equals(x.Value, permission, StringComparison.OrdinalIgnoreCase));
-    }
 }
