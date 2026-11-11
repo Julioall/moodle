@@ -21,7 +21,9 @@ public sealed class McpRuntimeTelemetryTests
         var measurements = new ConcurrentBag<KeyValuePair<string, object?>[]>();
         listener.InstrumentPublished = (instrument, meterListener) =>
         {
-            if (instrument.Meter.Name == "Moodle.McpTools")
+            // Other tests may publish to identically named meters in parallel.
+            // Observe only the exact meter instance owned by this fixture.
+            if (ReferenceEquals(instrument.Meter, metrics.InstrumentationMeter))
             {
                 meterListener.EnableMeasurementEvents(instrument);
             }
