@@ -308,8 +308,14 @@ jobs:
             fi
           fi
 
-          if [ "$MCP_REQUIRE_JWT" != "true" ] && [ "$MCP_REQUIRE_API_KEY" != "true" ]; then
-            echo "::error::At least one auth method must be enabled (MCP_REQUIRE_JWT or MCP_REQUIRE_API_KEY)."
+          # The application refuses API-key-only or dual MCP auth in Production.
+          # Reject unsupported settings before creating production environment files.
+          if [ "$MCP_REQUIRE_JWT" != "true" ] || [ "$MCP_REQUIRE_API_KEY" != "false" ]; then
+            echo "::error::Production MCP requires JWT=true and API key=false."
+            exit 1
+          fi
+          if [ "$OAUTH_REQUIRE_HTTPS_METADATA" != "true" ]; then
+            echo "::error::Production OAuth requires HTTPS metadata validation."
             exit 1
           fi
 
