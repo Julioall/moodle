@@ -14,6 +14,10 @@
 | PUB-01 | Guias excluídos da árvore futura e da imagem; corpus externo configurável | Verificar autorização/licença e histórico Git / forks / caches | Inventário e decisão documentada do titular |
 | LGPD | ROPA, retenção, DSAR, incidentes e aviso propostos como minutas | Definir controlador, DPO, bases legais, contratos, backups, fornecedores, canais, RIPD quando aplicável | Aprovação formal e evidência de operações em homologação |
 
+## Ativação de operações de escrita
+
+As variáveis `FEATURES_MESSAGES_WRITE_ENABLED`, `FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED`, `FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED` e `FEATURES_MCP_GRADING_WRITE_ENABLED` têm valor padrão **false** no deploy. Qualquer ativação exige decisão explícita da instituição responsável, teste de permissões por usuário/curso e confirmação humana para alterações acadêmicas. A flag não substitui controle de escopo nem autorização do Moodle.
+
 ## Deploy com bloqueio de segurança
 
 1. Não executar migrações 085–087 diretamente em produção sem backup, plano de rollback, janela de manutenção e reaprovisionamento administrativo confiável. A migração 085 revoga privilégios antigos intencionalmente.
