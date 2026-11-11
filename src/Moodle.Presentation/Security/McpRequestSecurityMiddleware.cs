@@ -48,7 +48,9 @@ internal sealed class McpPrincipalEnricher(
             foreach (var claim in identity.FindAll("connector_client_id")
                          .Concat(identity.FindAll("platform_permission"))
                          .Concat(identity.FindAll("platform_permission_deny"))
-                         .Concat(identity.FindAll("team_id")).ToArray())
+                         .Concat(identity.FindAll("team_id"))
+                         .Concat(identity.FindAll(ClaimTypes.Role))
+                         .Concat(identity.FindAll("role")).ToArray())
                 identity.RemoveClaim(claim);
             return;
         }
@@ -84,7 +86,9 @@ internal sealed class McpPrincipalEnricher(
             foreach (var claim in identity.FindAll("connector_client_id")
                          .Concat(identity.FindAll("platform_permission"))
                          .Concat(identity.FindAll("platform_permission_deny"))
-                         .Concat(identity.FindAll("team_id")).ToArray())
+                         .Concat(identity.FindAll("team_id"))
+                         .Concat(identity.FindAll(ClaimTypes.Role))
+                         .Concat(identity.FindAll("role")).ToArray())
                 identity.RemoveClaim(claim);
             return;
         }
