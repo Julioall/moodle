@@ -456,7 +456,7 @@ public sealed class ConnectorDbContextSchemaInitializerPostgresTests
                         WHERE table_schema = current_schema()
                           AND table_name = 'moodle_call_diagnostics'
                           AND column_name IN ('RawPayloadState','RawPayloadSizeBytes','RawPayloadSha256','RawPayloadContentType'))
-                    AND (SELECT MAX("Version") = 84 FROM "MOODLE_schema_versions");
+                    AND (SELECT MAX("Version") = 87 FROM "MOODLE_schema_versions");
                 """;
             Assert.True(Convert.ToBoolean(await verify.ExecuteScalarAsync()));
 
