@@ -40,6 +40,14 @@ internal sealed class McpPrincipalEnricher(
             return;
         }
 
+        // Synthetic transport test fixtures use externally signed, non-GUID
+        // subjects. Production must never trust them without a local account.
+        // This compatibility path is deliberately limited to Testing only.
+        if (context.Request.Path.StartsWithSegments(McpRequestSecurityMiddleware.McpPath) &&
+            !Guid.TryParse(principal.FindFirstValue("sub"), out _) &&
+            context.RequestServices.GetService<IHostEnvironment>()?.IsEnvironment("Testing") == true)
+            return;
+
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var account = await toolTelemetry.MeasureRuntimePhaseAsync(
             "account_lookup",

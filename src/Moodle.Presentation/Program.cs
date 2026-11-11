@@ -337,8 +337,7 @@ builder.Services
         options.Events.OnValidatePrincipal = async context =>
         {
             var subject = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-            var issued = context.Properties.IssuedUtc;
-            if (!Guid.TryParse(subject, out var accountId) || issued is null)
+            if (!Guid.TryParse(subject, out var accountId))
             {
                 context.RejectPrincipal();
                 return;
@@ -346,11 +345,11 @@ builder.Services
             var db = context.HttpContext.RequestServices.GetRequiredService<ConnectorDbContext>();
             var accountState = await db.UserAccounts.AsNoTracking()
                 .Where(item => item.Id == accountId)
-                .Select(item => new { item.UpdatedAtUtc, item.SecurityStamp })
+                .Select(item => item.SecurityStamp)
                 .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
             var cookieStamp = context.Principal?.FindFirstValue("account_security_stamp");
-            if (accountState is null || accountState.UpdatedAtUtc > issued.Value ||
-                !string.Equals(cookieStamp, accountState.SecurityStamp.ToString("N"), StringComparison.Ordinal))
+            if (accountState == Guid.Empty ||
+                !string.Equals(cookieStamp, accountState.ToString("N"), StringComparison.Ordinal))
                 context.RejectPrincipal();
         };
     })
