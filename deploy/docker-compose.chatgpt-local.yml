@@ -1,0 +1,89 @@
+# Perfil isolado para MCP local com OAuth por tunel HTTPS externo.
+# Nao utilizar com dados institucionais reais sem autorizacao.
+# Inicie com scripts/start-chatgpt-local.ps1 (segredos e URL nunca sao versionados).
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: moodle:chatgpt-local
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${CHATGPT_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:8080
+      APP_DOMAIN: "${CHATGPT_PUBLIC_ORIGIN:?Passe a URL HTTPS pelo script start-chatgpt-local.ps1}"
+      AllowedHosts: "${CHATGPT_ALLOWED_HOSTS:-localhost;127.0.0.1}"
+      Postgres__ConnectionString: "Host=postgres;Port=5432;Database=MOODLE;Username=MOODLE;Password=${CHATGPT_DB_PASSWORD:?Execute Init primeiro}"
+      ConnectorSecrets__EncryptionKeyBase64: "${CHATGPT_ENCRYPTION_KEY_BASE64:?Execute Init primeiro}"
+      AdminApi__ApiKey: "${CHATGPT_ADMIN_API_KEY:?Execute Init primeiro}"
+      MEDIATR_LICENSE_KEY: "${MEDIATR_LICENSE_KEY:-}"
+      DataProtection__KeyStoragePath: /app/data/keys
+      OAuth__KeyStoragePath: /app/data/oauth
+      OAuth__Issuer: "${CHATGPT_PUBLIC_ORIGIN}"
+      OAuth__Audience: "${CHATGPT_PUBLIC_ORIGIN}/mcp"
+      OAuth__RequireHttpsMetadata: "${CHATGPT_HTTPS_REQUIRED:-true}"
+      McpServerSecurity__RequireJwt: "true"
+      McpServerSecurity__RequireApiKey: "false"
+      Registration__PublicEnabled: "${CHATGPT_REGISTRATION_ENABLED:-false}"
+      PasswordReset__Enabled: "false"
+      # Docker bridge gateway is a proxy only because the container is bound to
+      # host loopback; forwarded headers from arbitrary external IPs are rejected.
+      ForwardedHeaders__KnownNetworks__0: 172.16.0.0/12
+      ForwardedHeaders__KnownNetworks__1: 127.0.0.1/32
+      ForwardedHeaders__KnownNetworks__2: ::1/128
+      GradingLimits__GradingPackageBlobRootDirectory: /app/data/private-grading-packages
+      ReportArtifacts__RootDirectory: /app/data/private-reports
+      MoodleApi__UseStubData: "false"
+      MoodleProxy__UseStubData: "false"
+      Features__MessagesWriteEnabled: "false"
+      Features__AssignmentFeedbackWriteEnabled: "false"
+      Features__AssignmentGradeWriteEnabled: "false"
+      Features__McpGradingWriteEnabled: "false"
+      Features__UniversalMoodleWriteEnabled: "false"
+      Features__CourseContentWriteEnabled: "false"
+      Features__ScheduledMessagesEnabled: "false"
+      Features__ProfessionalTasksEnabled: "false"
+      Features__ProfessionalAgendaEnabled: "false"
+      Schema__ApplyOnStartup: "true"
+    ports:
+      - "127.0.0.1:${CHATGPT_LOCAL_PORT:-8788}:8080"
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: MOODLE
+      POSTGRES_USER: MOODLE
+      POSTGRES_PASSWORD: "${CHATGPT_DB_PASSWORD:?Execute Init primeiro}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U MOODLE -d MOODLE"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  app-data:
+  postgres-data:

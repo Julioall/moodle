@@ -1,26 +1,28 @@
-# Moodle
+# Moodle Conector
 
-Conector independente que expõe o Moodle ao ChatGPT via MCP e oferece um portal web para contas, conexões Moodle e fluxos acadêmicos. Leituras usam a conexão autorizada do usuário. Escritas disponíveis exigem permissão e confirmação pelo fluxo previsto.
+Servidor MCP para conectar o Moodle ao ChatGPT, com portal web, autenticação OAuth e fluxos acadêmicos. Consultas usam a conexão Moodle autorizada do usuário. Ações de escrita exigem autorização e confirmação quando habilitadas.
 
-## Início rápido
+## Início rápido local
 
-Para usar o serviço, crie uma conta no portal, cadastre uma conexão Moodle e conecte o ChatGPT ao endpoint MCP fornecido pelo ambiente.
+O repositório tem dois modos independentes:
 
-Para desenvolvimento local, instale o Docker Desktop e suba a stack:
+- **Desenvolvimento local simples:** `deploy/docker-compose.local.yml`, em `http://127.0.0.1:8787`. **Não exponha este modo a túnel público:** ele usa defaults de desenvolvimento, que não oferecem a proteção de autenticação necessária.
+- **MCP local + plugin privado do ChatGPT:** `deploy/docker-compose.chatgpt-local.yml`, em `http://127.0.0.1:8788`. Inicia em modo Production com OAuth/JWT, senhas locais próprias e operações de escrita desligadas. Para conectar ao ChatGPT por HTTPS, consulte **[Guia de MCP local para ChatGPT](docs/operations/local-mcp-chatgpt.md)**.
 
+Para rodar o modo simples com Docker Desktop:
+
+```powershell
+docker compose -f deploy/docker-compose.local.yml -p moodle-conector up -d --build
 ```
 
-Materiais pedagógicos institucionais locais em `public/pedagogic/` não são versionados nem
-incluídos na publicação. O mecanismo de busca de orientações funciona sem essa base; só distribua
-materiais nesse diretório quando houver autorização explícita de redistribuição.powershell
-docker compose --project-directory deploy --project-name moodle-conector -f deploy/docker-compose.local.yml up -d --build
-```
+> Materiais pedagógicos institucionais não são versionados nem distribuídos sem autorização. O sistema funciona sem eles. O modo local para ChatGPT não dispensa autorização institucional para acessar dados reais.
 
-## Entenda e opere o projeto
+## Documentação
 
-- [Referência da aplicação e dos dados](docs/application-reference.md) — estado atual, dados, escopos, retenção e fontes de autoridade.
-- [Índice da documentação](docs/README.md) — segurança, integrações, operação e contratos.
-- [Certificação de releases](docs/operations/release-certification.md) — gates locais e CI.
-- [Compose de produção](deploy/docker-compose.yml) e [workflow de deploy](.github/workflows/deploy-vps.yml).
+- [MCP local para ChatGPT](docs/operations/local-mcp-chatgpt.md)
+- [Referência da aplicação e dos dados](docs/application-reference.md)
+- [Índice da documentação](docs/README.md)
+- [Certificação de releases](docs/operations/release-certification.md)
+- [Compose de produção](deploy/docker-compose.yml) e [workflow de deploy](.github/workflows/deploy-vps.yml)
 
-Este projeto não é oficial do Moodle HQ. A referência da aplicação e do modelo de dados deve ser consultada antes de inferir comportamento a partir de uma spec ou de um relatório antigo.
+Este projeto não é oficial do Moodle HQ.

@@ -170,6 +170,40 @@ jobs:
           docker compose --project-directory . -f deploy/docker-compose.local.yml config --format json | python -c "import json, sys; env = json.load(sys.stdin)['services']['app']['environment']; assert env.get('GradingLimits__GradingPackageBlobRootDirectory') == '/app/data/private-grading-packages', 'local grading package blobs must use persistent app-data storage'"
           docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -e APP_DOMAIN=moodle.localhost caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
+      - name: Validate ChatGPT local OAuth Compose and PowerShell syntax
+        shell: pwsh
+        env:
+          CHATGPT_PUBLIC_ORIGIN: https://local-mcp.example
+          CHATGPT_ALLOWED_HOSTS: local-mcp.example
+          CHATGPT_DB_PASSWORD: ci-local-db-only
+          CHATGPT_ENCRYPTION_KEY_BASE64: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+          CHATGPT_ADMIN_API_KEY: ci-local-admin-only
+          MEDIATR_LICENSE_KEY: ci-local-validation-not-a-license
+        run: |
+          $file = './deploy/docker-compose.chatgpt-local.yml'
+          docker compose -f $file config --quiet
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid local ChatGPT Compose profile' }
+          $json = docker compose -f $file config --format json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Compose profile' }
+          $app = $json.services.app
+          if ([string]$app.environment.McpServerSecurity__RequireJwt -ne 'true' -or
+              [string]$app.environment.McpServerSecurity__RequireApiKey -ne 'false' -or
+              [string]$app.environment.OAuth__RequireHttpsMetadata -ne 'true' -or
+              [string]$app.environment.Registration__PublicEnabled -ne 'false' -or
+              [string]$app.environment.Features__UniversalMoodleWriteEnabled -ne 'false') {
+            throw 'Unsafe local MCP default configuration'
+          }
+          if (@($app.ports | Where-Object { $_.host_ip -eq '127.0.0.1' -and $_.target -eq 8080 }).Count -ne 1) {
+            throw 'MCP profile must bind only to host loopback'
+          }
+          if ($json.services.postgres.ports) { throw 'PostgreSQL must have no host ports' }
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path './scripts/start-chatgpt-local.ps1').Path,
+            [ref]$tokens, [ref]$errors) | Out-Null
+          if (@($errors).Count -gt 0) { throw "PowerShell syntax errors: $($errors -join '; ')" }
+
       - name: Build production image
         run: docker build -f deploy/Dockerfile --tag moodle-ci:local .
 
