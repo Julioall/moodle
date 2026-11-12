@@ -259,6 +259,15 @@ internal sealed class MoodleUniversalWriteService(
             throw new MoodleApiException("function_not_write_allowed", "A funcao solicitada nao requer o fluxo de escrita confirmado.");
         }
 
+        // A broad OAuth scope cannot authorize an unclassified Moodle API
+        // function, including destructive functions exposed by the remote token.
+        if (!MoodleWriteScopePolicy.TryGetScope(descriptor.Name, out _))
+        {
+            throw new MoodleApiException(
+                "moodle_write_function_unclassified",
+                "A função Moodle não possui política explícita de escrita autorizada.");
+        }
+
         return descriptor;
     }
 

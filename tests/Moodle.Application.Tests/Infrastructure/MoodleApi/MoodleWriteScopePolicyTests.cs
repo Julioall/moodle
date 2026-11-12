@@ -23,7 +23,7 @@ public sealed class MoodleWriteScopePolicyTests
     [InlineData("mod_assign_set_user_flags")]
     [InlineData("future_moodle_write_function")]
     [InlineData("")]
-    public void ForFunction_UsaEscopoGenericoParaFuncaoSemFamiliaEspecializada(string functionName)
+    public void ForFunction_BloqueiaFuncaoSemFamiliaEspecializada(string functionName)
     {
         Assert.False(MoodleWriteScopePolicy.TryGetScope(functionName, out var scope));
         Assert.Empty(scope);
@@ -34,7 +34,8 @@ public sealed class MoodleWriteScopePolicyTests
             return;
         }
 
-        Assert.Equal("moodle.write", MoodleWriteScopePolicy.ForFunction(functionName));
+        var error = Assert.Throws<MoodleApiException>(() => MoodleWriteScopePolicy.ForFunction(functionName));
+        Assert.Equal("moodle_write_function_unclassified", error.ErrorCode);
     }
 
     [Fact]
