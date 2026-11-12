@@ -14,6 +14,10 @@
 | PUB-01 | Guias excluídos da árvore futura e da imagem; corpus externo configurável | Verificar autorização/licença e histórico Git / forks / caches | Inventário e decisão documentada do titular |
 | LGPD | ROPA, retenção, DSAR, incidentes e aviso propostos como minutas | Definir controlador, DPO, bases legais, contratos, backups, fornecedores, canais, RIPD quando aplicável | Aprovação formal e evidência de operações em homologação |
 
+## Escritas universais com autorização explícita
+
+O executor `moodle_prepare_write`/`moodle_confirm_write` exige mapeamento de função para escopo específico em `MoodleWriteScopePolicy`. Uma permissão genérica `moodle.write` não habilita função desconhecida, destrutiva ou sem revisão. Novas operações devem receber classificação e testes negativos antes da liberação.
+
 ## Ativação de operações de escrita
 
 As variáveis `FEATURES_MESSAGES_WRITE_ENABLED`, `FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED`, `FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED` e `FEATURES_MCP_GRADING_WRITE_ENABLED` têm valor padrão **false** no deploy. Qualquer ativação exige decisão explícita da instituição responsável, teste de permissões por usuário/curso e confirmação humana para alterações acadêmicas. A flag não substitui controle de escopo nem autorização do Moodle.
