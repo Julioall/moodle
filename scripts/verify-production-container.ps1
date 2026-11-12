@@ -54,6 +54,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "A imagem '$Image' não existe localmente. Crie-a antes de executar esta certificação."
 }
 
+# The production image must not serve requests as root.
+$imageUser = (& docker image inspect --format '{{.Config.User}}' $Image).Trim()
+if ([string]::IsNullOrWhiteSpace($imageUser) -or $imageUser -in @('root', '0')) {
+    throw 'A imagem de produção deve configurar um usuário não-root.'
+}
+
 if ($HostPort -eq 0) {
     $HostPort = Get-FreeLoopbackPort
 }
