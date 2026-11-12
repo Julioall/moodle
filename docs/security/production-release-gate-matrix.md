@@ -18,6 +18,10 @@
 
 As variáveis `FEATURES_MESSAGES_WRITE_ENABLED`, `FEATURES_ASSIGNMENT_FEEDBACK_WRITE_ENABLED`, `FEATURES_ASSIGNMENT_GRADE_WRITE_ENABLED` e `FEATURES_MCP_GRADING_WRITE_ENABLED` têm valor padrão **false** no deploy. Qualquer ativação exige decisão explícita da instituição responsável, teste de permissões por usuário/curso e confirmação humana para alterações acadêmicas. A flag não substitui controle de escopo nem autorização do Moodle.
 
+## Varredura automática de dependências
+
+O CI de segurança agora deve bloquear o build diante de avisos **altos ou críticos** no `npm audit` (incluindo ferramentas de build) e de `NU1903`/`NU1904` no NuGet Audit de dependências diretas e transitivas do .NET 10. A verificação depende da disponibilidade das bases de avisos dos respectivos registries e **não substitui** análise SAST, segredos, histórico Git ou inventário de componentes da imagem Docker. Não suprimir avisos sem justificativa e aceite registrado.
+
 ## Deploy com bloqueio de segurança
 
 1. Não executar migrações 085–087 diretamente em produção sem backup, plano de rollback, janela de manutenção e reaprovisionamento administrativo confiável. A migração 085 revoga privilégios antigos intencionalmente.
