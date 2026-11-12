@@ -24,56 +24,21 @@ internal static class PortalEndpointAuthorization
             return null;
         }
 
-        var email = principal.FindFirstValue(ClaimTypes.Email)
-            ?? principal.FindFirstValue("email")
-            ?? principal.FindFirstValue("preferred_username");
-        var name = principal.FindFirstValue(ClaimTypes.Name)
-            ?? principal.FindFirstValue("name")
-            ?? principal.FindFirstValue("preferred_username")
-            ?? email;
+        // Browser sessions are issued with a stable local account GUID.
+        // Never resolve an unknown/missing subject by an untrusted email claim:
+        // an old cookie could otherwise be rebound to a different account
+        // when an email is reused after deletion.
         var subject = principal.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? principal.FindFirstValue(OpenIddictConstants.Claims.Subject)
             ?? principal.FindFirstValue("sub");
-
-        if (Guid.TryParse(subject, out var userId))
-        {
-            var accountById = await dbContext.UserAccounts.FindAsync([userId], cancellationToken);
-            if (accountById is not null)
-            {
-                return new AppIdentity(
-                    accountById.Id,
-                    accountById.Name,
-                    accountById.Email,
-                    accountById.ConnectorClientId);
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(email))
-        {
+        if (!Guid.TryParse(subject, out var userId))
             return null;
-        }
 
-        var normalizedEmail = email.Trim().ToLowerInvariant();
-        var accountByEmail = await dbContext.UserAccounts
-            .SingleOrDefaultAsync(account => account.Email == normalizedEmail, cancellationToken);
-        if (accountByEmail is null)
-        {
-            return null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(name) &&
-            !string.Equals(accountByEmail.Name, name.Trim(), StringComparison.Ordinal))
-        {
-            accountByEmail.Name = name.Trim();
-            accountByEmail.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        return new AppIdentity(
-            accountByEmail.Id,
-            accountByEmail.Name,
-            accountByEmail.Email,
-            accountByEmail.ConnectorClientId);
+        var account = await dbContext.UserAccounts.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);
+        return account is null
+            ? null
+            : new AppIdentity(account.Id, account.Name, account.Email, account.ConnectorClientId);
     }
 
     public static bool HasAppPermission(HttpContext context, string permission)
