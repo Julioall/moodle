@@ -35,10 +35,34 @@ internal sealed class McpPrincipalEnricher(
         var email = principal.FindFirstValue(ClaimTypes.Email)
             ?? principal.FindFirstValue("email")
             ?? principal.FindFirstValue("preferred_username");
-        if (string.IsNullOrWhiteSpace(email) || principal.Identity is not ClaimsIdentity identity)
+        if (principal.Identity is not ClaimsIdentity identity)
+            return;
+
+        // Only a real, locally bound OAuth subject can authorize production MCP
+        // requests, even when the token was signed before account deletion.
+        var productionMcp = context.Request.Path.StartsWithSegments(McpRequestSecurityMiddleware.McpPath) &&
+            context.RequestServices.GetService<IHostEnvironment>()?.IsEnvironment("Testing") != true;
+        if (productionMcp && (string.IsNullOrWhiteSpace(email) ||
+                              !Guid.TryParse(principal.FindFirstValue("sub"), out _)))
         {
+            foreach (var claim in identity.FindAll("connector_client_id")
+                         .Concat(identity.FindAll("platform_permission"))
+                         .Concat(identity.FindAll("platform_permission_deny"))
+                         .Concat(identity.FindAll("team_id"))
+                         .Concat(identity.FindAll(ClaimTypes.Role))
+                         .Concat(identity.FindAll("role")).ToArray())
+                identity.RemoveClaim(claim);
             return;
         }
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        // Synthetic transport test fixtures use externally signed, non-GUID
+        // subjects. Production must never trust them without a local account.
+        // This compatibility path is deliberately limited to Testing only.
+        if (context.Request.Path.StartsWithSegments(McpRequestSecurityMiddleware.McpPath) &&
+            !Guid.TryParse(principal.FindFirstValue("sub"), out _) &&
+            context.RequestServices.GetService<IHostEnvironment>()?.IsEnvironment("Testing") == true)
+            return;
 
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var account = await toolTelemetry.MeasureRuntimePhaseAsync(
@@ -47,8 +71,25 @@ internal sealed class McpPrincipalEnricher(
                 .AsNoTracking()
                 .SingleOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken),
             result => result is null ? "not_found" : "success");
-        if (account is null)
+        // Only OAuth tokens minted for this specific account and credential
+        // generation may access the MCP. Synthetic non-GUID subjects are used by
+        // transport integration fixtures; production OAuth subjects are GUIDs.
+        var hasLocalSubject = Guid.TryParse(principal.FindFirstValue("sub"), out var subjectId);
+        var isMcp = context.Request.Path.StartsWithSegments(McpRequestSecurityMiddleware.McpPath);
+        var staleOAuthToken = isMcp && hasLocalSubject &&
+            (account is null || account.Id != subjectId ||
+             !string.Equals(principal.FindFirstValue("account_security_stamp"),
+                 account.SecurityStamp.ToString("N"), StringComparison.Ordinal));
+
+        if (account is null || staleOAuthToken)
         {
+            foreach (var claim in identity.FindAll("connector_client_id")
+                         .Concat(identity.FindAll("platform_permission"))
+                         .Concat(identity.FindAll("platform_permission_deny"))
+                         .Concat(identity.FindAll("team_id"))
+                         .Concat(identity.FindAll(ClaimTypes.Role))
+                         .Concat(identity.FindAll("role")).ToArray())
+                identity.RemoveClaim(claim);
             return;
         }
 
@@ -133,7 +174,9 @@ internal sealed class PortalApiAuthorizationMiddleware(IAuthorizationService aut
         "/api/info",
         "/api/csrf",
         "/api/account/register",
-        "/api/account/login"
+        "/api/account/login",
+        "/api/account/password-reset/request",
+        "/api/account/password-reset/complete"
     ];
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
@@ -289,18 +332,9 @@ internal sealed class McpRequestSecurityMiddleware(
                 }
                 else
                 {
-                    foreach (var permission in PlatformPermissionCatalog.AllRead)
-                    {
-                        claims.Add(new Claim("platform_permission", permission));
-                    }
-
-                    if (client.CanWrite)
-                    {
-                        foreach (var permission in PlatformPermissionCatalog.AllWrite)
-                        {
-                            claims.Add(new Claim("platform_permission", permission));
-                        }
-                    }
+                    // Legacy/non-user API-key identities have no platform grants.
+                    // Never infer authorization from possession of a connector key.
+                    // Provision a real portal identity and explicit permissions first.
                 }
 
                 context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "connector-api-key"));

@@ -37,12 +37,10 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
                 CreatedByUserId = userId
             };
             dbContext.PermissionGroups.Add(group);
-            // Keep the bootstrap permission so the account can finish its
-            // own access setup while the access-management screens are hidden.
-            dbContext.PermissionGroupPermissions.Add(new PermissionGroupPermissionEntity
+            dbContext.PermissionGroupPermissions.AddRange(PlatformPermissionCatalog.DefaultPersonalAccess.Select(permission => new PermissionGroupPermissionEntity
             {
-                Id = Guid.NewGuid(), GroupId = group.Id, Permission = PlatformPermissionCatalog.PermissionGroupsManage
-            });
+                Id = Guid.NewGuid(), GroupId = group.Id, Permission = permission
+            }));
             dbContext.PermissionGroupMemberships.Add(new PermissionGroupMembershipEntity
             {
                 Id = Guid.NewGuid(), GroupId = group.Id, UserId = userId
@@ -86,6 +84,7 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
         var name = NormalizeGroupName(request.Name);
         var description = NormalizeGroupDescription(request.Description);
         var permissions = NormalizePermissions(request.Permissions);
+        await EnsureCanGrantPermissionsAsync(request.ActorUserId, permissions, cancellationToken);
         var group = new PermissionGroupEntity
         {
             Id = Guid.NewGuid(),
@@ -109,12 +108,21 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
         await EnsureCanManageGroupsAsync(request.ActorUserId, cancellationToken);
         var group = await dbContext.PermissionGroups
             .FirstOrDefaultAsync(item => item.Id == request.GroupId &&
-                (item.CreatedByUserId == request.ActorUserId || dbContext.PermissionGroupMemberships.Any(member => member.GroupId == item.Id && member.UserId == request.ActorUserId)), cancellationToken);
+                item.CreatedByUserId == request.ActorUserId, cancellationToken);
         if (group is null) throw new InvalidOperationException("Grupo de permissões não encontrado.");
+
+        // Legacy cross-tenant memberships may predate the authorization fix.
+        // Do not alter a group that currently affects users outside this administrator's scope.
+        var memberIds = await dbContext.PermissionGroupMemberships.AsNoTracking()
+            .Where(member => member.GroupId == group.Id)
+            .Select(member => member.UserId).ToArrayAsync(cancellationToken);
+        foreach (var memberId in memberIds)
+            await EnsureAuthorizedTeamTargetAsync(request.ActorUserId, memberId, cancellationToken);
 
         var name = NormalizeGroupName(request.Name);
         var description = NormalizeGroupDescription(request.Description);
         var permissions = NormalizePermissions(request.Permissions);
+        await EnsureCanGrantPermissionsAsync(request.ActorUserId, permissions, cancellationToken);
         var currentPermissions = await dbContext.PermissionGroupPermissions
             .Where(item => item.GroupId == group.Id)
             .ToArrayAsync(cancellationToken);
@@ -127,6 +135,7 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
         {
             Id = Guid.NewGuid(), GroupId = group.Id, Permission = permission
         }));
+        await RotateSecurityStampsAsync(memberIds, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return new PermissionGroupDto(group.Id, group.Name, group.Description, permissions);
     }
@@ -134,14 +143,22 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
     public async Task AddMemberAsync(AddPermissionGroupMemberRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageGroupsAsync(request.ActorUserId, cancellationToken);
-        if (!await dbContext.PermissionGroups.AnyAsync(item => item.Id == request.GroupId, cancellationToken))
-            throw new InvalidOperationException("Grupo de permissões não encontrado.");
+        var group = await dbContext.PermissionGroups.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == request.GroupId && item.CreatedByUserId == request.ActorUserId, cancellationToken);
+        if (group is null) throw new InvalidOperationException("Grupo de permissões não encontrado ou não administrado pelo solicitante.");
+        if (!await dbContext.UserAccounts.AsNoTracking().AnyAsync(item => item.Id == request.UserId, cancellationToken))
+            throw new InvalidOperationException("Conta de destino não encontrada.");
+        await EnsureAuthorizedTeamTargetAsync(request.ActorUserId, request.UserId, cancellationToken);
+        var groupPermissions = await dbContext.PermissionGroupPermissions.AsNoTracking()
+            .Where(item => item.GroupId == group.Id).Select(item => item.Permission).ToArrayAsync(cancellationToken);
+        await EnsureCanGrantPermissionsAsync(request.ActorUserId, groupPermissions, cancellationToken);
         if (!await dbContext.PermissionGroupMemberships.AnyAsync(item => item.GroupId == request.GroupId && item.UserId == request.UserId, cancellationToken))
         {
             dbContext.PermissionGroupMemberships.Add(new PermissionGroupMembershipEntity
             {
                 Id = Guid.NewGuid(), GroupId = request.GroupId, UserId = request.UserId
             });
+            await RotateSecurityStampsAsync([request.UserId], cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
     }
@@ -149,22 +166,29 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
     public async Task SetUserPermissionAsync(SetUserPermissionRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageGroupsAsync(request.ActorUserId, cancellationToken);
+        var effective = await GetEffectivePermissionsAsync(request.ActorUserId, cancellationToken);
+        if (!effective.Contains("admin.view", StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Somente administradores explicitamente autorizados podem modificar permissões individuais.");
+        await EnsureAuthorizedTeamTargetAsync(request.ActorUserId, request.UserId, cancellationToken);
+        if (!await dbContext.UserAccounts.AnyAsync(item => item.Id == request.UserId, cancellationToken))
+            throw new InvalidOperationException("Conta de destino não encontrada.");
         var permission = NormalizePermission(request.Permission);
+        if (request.IsAllowed && !effective.Contains(permission, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Não é permitido conceder permissões que o solicitante não possui.");
         var existing = await dbContext.UserPermissionOverrides.FirstOrDefaultAsync(item => item.UserId == request.UserId && item.Permission == permission, cancellationToken);
         if (existing is null)
-        {
             dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
             {
                 Id = Guid.NewGuid(), UserId = request.UserId, Permission = permission,
                 IsAllowed = request.IsAllowed, ChangedByUserId = request.ActorUserId
             });
-        }
         else
         {
             existing.IsAllowed = request.IsAllowed;
             existing.ChangedByUserId = request.ActorUserId;
             existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
+        await RotateSecurityStampsAsync([request.UserId], cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -175,13 +199,7 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
                                       where membership.UserId == userId
                                       select permission.Permission).ToArrayAsync(cancellationToken);
         var overrides = await dbContext.UserPermissionOverrides.AsNoTracking().Where(item => item.UserId == userId).ToArrayAsync(cancellationToken);
-        // Temporary rollout policy: until the access-management UI is enabled
-        // again, every local account receives the complete platform catalog.
-        // Explicit deny overrides still win, so an existing safety exception
-        // is not silently discarded.
-        var permissions = PlatformPermissionCatalog.TemporaryRollout
-            .Concat(groupPermissions)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var permissions = groupPermissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var grant in overrides.Where(item => item.IsAllowed)) permissions.Add(grant.Permission);
         foreach (var deny in overrides.Where(item => !item.IsAllowed)) permissions.Remove(deny.Permission);
         return permissions.OrderBy(item => item, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -202,6 +220,46 @@ internal sealed class PlatformPermissionService(ConnectorDbContext dbContext) : 
             })
             .OrderBy(group => group.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private async Task RotateSecurityStampsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0) return;
+        var accounts = await dbContext.UserAccounts
+            .Where(account => userIds.Contains(account.Id)).ToArrayAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var account in accounts)
+        {
+            account.SecurityStamp = Guid.NewGuid();
+            account.UpdatedAtUtc = now;
+        }
+    }
+
+    private async Task EnsureCanGrantPermissionsAsync(Guid actorUserId, IEnumerable<string> permissions, CancellationToken cancellationToken)
+    {
+        var effective = await GetEffectivePermissionsAsync(actorUserId, cancellationToken);
+        if (permissions.Any(permission => !effective.Contains(permission, StringComparer.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Não é permitido atribuir uma permissão que o solicitante não possui.");
+    }
+
+    private async Task EnsureAuthorizedTeamTargetAsync(Guid actorUserId, Guid targetUserId, CancellationToken cancellationToken)
+    {
+        if (actorUserId == targetUserId) return;
+        var teamIds = await dbContext.TeamMemberships.AsNoTracking()
+            .Where(member => member.UserId == actorUserId && member.IsActive &&
+                member.Role == "administrator" &&
+                dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal))
+            .Select(member => member.TeamId).ToArrayAsync(cancellationToken);
+        // Platform permissions affect the whole account, not just one team.
+        // Never allow a team administrator to alter a user who also belongs to
+        // another institution outside that administrator's authority.
+        var targetTeamIds = await dbContext.TeamMemberships.AsNoTracking()
+            .Where(member => member.UserId == targetUserId && member.IsActive &&
+                dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal))
+            .Select(member => member.TeamId).Distinct().ToArrayAsync(cancellationToken);
+        if (teamIds.Length == 0 || targetTeamIds.Length == 0 ||
+            targetTeamIds.Any(teamId => !teamIds.Contains(teamId)))
+            throw new InvalidOperationException("O destino também possui vínculos institucionais fora da autoridade do solicitante.");
     }
 
     private async Task EnsureCanManageGroupsAsync(Guid userId, CancellationToken cancellationToken)
@@ -269,11 +327,12 @@ public static class PlatformPermissionCatalog
         ..PortalPermissions
     ];
 
-    // The temporary rollout opens the application surface for every account,
-    // while keeping team administration behind its existing explicit grant.
-    // Teams control tenancy and access policy, not the Moodle workspace.
-    public static readonly string[] TemporaryRollout =
+    public static readonly string[] DefaultPersonalAccess =
     [
-        ..All.Where(permission => permission is not TeamsManage)
+        "dashboard.view", "courses.view", "schools.view", "students.view", "reports.view",
+        "connections.manage", "settings.view", "grading.view",
+        "tool.assignments.view", "tool.messages.view", "tool.reports.view",
+        "tool.courses.view", "tool.students.view", "tool.classroom.view",
+        "tool.followup.view", "tool.forums.view", "tool.connections.manage", "tool.pedagogy.view"
     ];
 }

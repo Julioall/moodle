@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - dev
+      - 'fix/**'
     paths:
       - src/**
       - tests/**
@@ -102,13 +103,17 @@ jobs:
           npm run typecheck
           npm test
 
+      - name: Audit npm dependencies (high and critical)
+        working-directory: src/Moodle.Web
+        run: npm audit --audit-level=high
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore .NET
-        run: dotnet restore Moodle.slnx
+      - name: Restore and audit .NET dependencies (high and critical)
+        run: dotnet restore Moodle.slnx -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=high -warnaserror:NU1903,NU1904
 
       - name: Build .NET
         run: |

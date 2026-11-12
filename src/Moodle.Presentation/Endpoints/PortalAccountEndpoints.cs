@@ -28,6 +28,12 @@ internal static class PortalAccountEndpoints
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
+            if (!app.Environment.IsDevelopment() &&
+                !app.Environment.IsEnvironment("Testing") &&
+                !app.Configuration.GetValue<bool>("Registration:PublicEnabled"))
+                return Results.Json(new { ok = false, error = "Cadastro público indisponível; solicite acesso à instituição." },
+                    statusCode: StatusCodes.Status403Forbidden);
+
             if (string.IsNullOrWhiteSpace(input.Name) ||
                 string.IsNullOrWhiteSpace(input.Email) ||
                 string.IsNullOrWhiteSpace(input.Password))
@@ -92,67 +98,73 @@ internal static class PortalAccountEndpoints
             HttpContext context,
             ConnectorDbContext dbContext,
             IAccountService accountService,
-            CancellationToken cancellationToken) =>
-        {
-            if (await ResolveAppIdentityAsync(context, dbContext, cancellationToken) is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
-            context.Response.Headers.CacheControl = "no-store";
-            return Results.Ok(new { ok = true, accounts = await accountService.ListAccountsAsync(cancellationToken) });
-        }).RequireRateLimiting(rateLimitPolicy);
-
-        app.MapPost("/api/admin/accounts/{userId:guid}/reset-password", async (
-            Guid userId,
-            HttpContext context,
-            ConnectorDbContext dbContext,
-            IAccountService accountService,
-            IAntiforgery antiforgery,
-            CancellationToken cancellationToken) =>
-        {
-            if (await ResolveAppIdentityAsync(context, dbContext, cancellationToken) is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
-            await antiforgery.ValidateRequestAsync(context);
-            try
-            {
-                await accountService.ResetPasswordToDefaultAsync(userId, cancellationToken);
-                return Results.Ok(new { ok = true, message = "Senha redefinida para a senha padrão configurada." });
-            }
-            catch (ArgumentException ex) { return Results.BadRequest(new { ok = false, error = ex.Message }); }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { ok = false, error = ex.Message }); }
-        }).RequireRateLimiting(rateLimitPolicy);
-
-        app.MapPost("/api/admin/accounts/delete", async (
-            AdminDeleteAccountsInput input,
-            HttpContext context,
-            ConnectorDbContext dbContext,
-            IAccountService accountService,
-            IAntiforgery antiforgery,
+            IPlatformPermissionService platformPermissionService,
             CancellationToken cancellationToken) =>
         {
             var identity = await ResolveAppIdentityAsync(context, dbContext, cancellationToken);
             if (identity is null) return Results.Unauthorized();
-            if (!PortalEndpointAuthorization.HasAppPermission(context, AppPermissionCatalog.AdminView)) return Results.Forbid();
-            await antiforgery.ValidateRequestAsync(context);
+            var permissions = await platformPermissionService.GetEffectivePermissionsAsync(identity.Id, cancellationToken);
+            if (!permissions.Contains(AppPermissionCatalog.AdminView, StringComparer.OrdinalIgnoreCase)) return Results.Forbid();
+            context.Response.Headers.CacheControl = "no-store";
+            return Results.Ok(new { ok = true, accounts = await accountService.ListAccountsAsync(identity.Id, cancellationToken) });
+        }).RequireRateLimiting(rateLimitPolicy);
 
+        // Intentionally disabled: resetting accounts to a shared password is unsafe.
+        app.MapPost("/api/admin/accounts/{userId:guid}/reset-password", () =>
+            Results.Json(new { ok = false, error = "Redefinição por senha compartilhada desativada." },
+                statusCode: StatusCodes.Status410Gone)).RequireRateLimiting(rateLimitPolicy);
+
+        // Deleting an entire account may erase data belonging to multiple institutions.
+        app.MapPost("/api/admin/accounts/delete", () =>
+            Results.Json(new { ok = false, error = "Exclusão administrativa em massa desativada até existir isolamento institucional." },
+                statusCode: StatusCodes.Status410Gone)).RequireRateLimiting(rateLimitPolicy);
+
+        app.MapPost("/api/account/password-reset/request", async (
+            PasswordResetRequestInput input,
+            HttpContext context,
+            IAccountPasswordResetService resetService,
+            IAntiforgery antiforgery,
+            PublicAccountRateLimiter limiter,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            context.Response.Headers.CacheControl = "no-store";
+            if (!resetService.IsEnabled)
+                return Results.Json(new { ok = false, error = "Recuperação de senha não configurada." },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            if (!limiter.TryAcquire(PublicAccountOperation.PasswordReset, input.Email, out var retryAfter))
+                return PublicAccountRateLimitResponse.TooManyRequests(context, retryAfter);
+            await resetService.RequestAsync(input.Email, cancellationToken);
+            // Account existence, rate limits per account and SMTP outcome are not disclosed.
+            return Results.Accepted(value: new { ok = true,
+                message = "Se a conta existir, as instruções serão enviadas ao e-mail cadastrado." });
+        }).RequireRateLimiting(rateLimitPolicy);
+
+        app.MapPost("/api/account/password-reset/complete", async (
+            PasswordResetCompleteInput input,
+            HttpContext context,
+            IAccountPasswordResetService resetService,
+            IAntiforgery antiforgery,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            context.Response.Headers.CacheControl = "no-store";
+            if (!resetService.IsEnabled)
+                return Results.Json(new { ok = false, error = "Recuperação de senha não configurada." },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            bool accepted;
             try
             {
-                var result = await accountService.DeleteAccountsAsAdminAsync(
-                    new AdminDeleteAccountsRequest(
-                        identity.Id,
-                        input.UserIds ?? [],
-                        input.Password,
-                        input.ConfirmationText),
-                    cancellationToken);
-                context.Response.Headers.CacheControl = "no-store";
-                return Results.Ok(new { ok = true, result });
+                accepted = await resetService.CompleteAsync(input.Token, input.NewPassword, cancellationToken);
             }
-            catch (ArgumentException ex)
+            catch (ArgumentException)
             {
-                return Results.BadRequest(new { ok = false, error = ex.Message });
+                return Results.BadRequest(new { ok = false, error = "Senha deve ter entre 8 e 256 caracteres." });
             }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { ok = false, error = ex.Message });
-            }
+            if (!accepted)
+                return Results.BadRequest(new { ok = false, error = "Código de recuperação inválido ou expirado." });
+            await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Results.Ok(new { ok = true, message = "Senha redefinida. Entre novamente." });
         }).RequireRateLimiting(rateLimitPolicy);
 
         app.MapPost("/api/account/login", async (
@@ -286,6 +298,7 @@ internal static class PortalAccountEndpoints
             HttpContext context,
             ConnectorDbContext dbContext,
             ITeamAccessService teamAccessService,
+            IPlatformPermissionService platformPermissionService,
             IAntiforgery antiforgery,
             CancellationToken cancellationToken) =>
         {
@@ -298,6 +311,11 @@ internal static class PortalAccountEndpoints
             try
             {
                 var team = await teamAccessService.AcceptInvitationAsync(identity.Id, identity.Email, input.Token, cancellationToken);
+                // The security stamp was rotated. Reissue the legitimate
+                // cookie so the accepting user can continue in this session.
+                await PortalAuthenticationEndpoints.SignInAppAccountAsync(context, dbContext,
+                    platformPermissionService, identity.Id, identity.Name, identity.Email, cancellationToken);
+                context.Response.Headers.CacheControl = "no-store";
                 return Results.Ok(new { ok = true, team });
             }
             catch (InvalidOperationException ex)
@@ -579,3 +597,5 @@ internal static class PortalAccountEndpoints
 }
 
 public sealed record ChangePasswordInput(string CurrentPassword, string NewPassword);
+public sealed record PasswordResetRequestInput(string Email);
+public sealed record PasswordResetCompleteInput(string Token, string NewPassword);

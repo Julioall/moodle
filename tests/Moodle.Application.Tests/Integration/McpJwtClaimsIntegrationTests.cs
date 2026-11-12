@@ -2094,10 +2094,12 @@ public class McpJwtClaimsIntegrationTests : IClassFixture<McpTestWebApplicationF
 
     private async Task<string> RegisterClientAsync(bool canWrite, WebApplicationFactory<Program>? factory = null)
     {
-        var client = (factory ?? _factory).CreateClient();
+        var targetFactory = factory ?? _factory;
+        var client = targetFactory.CreateClient();
+        var connectorClientId = $"integration-{Guid.NewGuid():N}";
         var payload = $$"""
         {
-          "clientId": "integration-{{Guid.NewGuid():N}}",
+          "clientId": "{{connectorClientId}}",
           "moodleAlias": "default",
           "moodleBaseUrl": "https://moodle.tests",
           "moodleUsername": "usuario.teste",
@@ -2125,6 +2127,30 @@ public class McpJwtClaimsIntegrationTests : IClassFixture<McpTestWebApplicationF
         var end = body.IndexOf('"', start);
         Assert.True(end > start, "Formato de apiKey invalido no payload de cadastro.");
 
+        // The production MCP now correctly refuses blanket grants to API keys
+        // without a user. Set up an explicitly authorized local test identity
+        // for this synthetic connector client.
+        using (var scope = targetFactory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ConnectorDbContext>();
+            var id = Guid.NewGuid();
+            db.UserAccounts.Add(new UserAccountEntity
+            {
+                Id = id, Name = "Integration fixture",
+                Email = $"{id:N}@example.invalid", PasswordHash = "test-only",
+                ConnectorClientId = connectorClientId
+            });
+            foreach (var permission in PlatformPermissionCatalog.AllRead
+                .Concat(canWrite ? PlatformPermissionCatalog.AllWrite : []))
+            {
+                db.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+                {
+                    Id = Guid.NewGuid(), UserId = id, Permission = permission,
+                    IsAllowed = true, ChangedByUserId = id
+                });
+            }
+            await db.SaveChangesAsync();
+        }
         return body[start..end];
     }
 

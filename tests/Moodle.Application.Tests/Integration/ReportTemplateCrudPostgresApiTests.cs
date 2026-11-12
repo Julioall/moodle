@@ -44,7 +44,8 @@ public class ReportTemplateCrudPostgresApiTests
             using var me = JsonDocument.Parse(await client.GetStringAsync("/api/account/me"));
             var owner = me.RootElement.GetProperty("id").GetGuid();
             using var permission = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-            Assert.Equal(HttpStatusCode.OK, permission.StatusCode);
+            // reports.view is already in the least-privilege personal role.
+            Assert.Equal(HttpStatusCode.Forbidden, permission.StatusCode);
             using var login = await Send(client, HttpMethod.Post, "/api/account/login", new { email, password });
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
             using var initialList = JsonDocument.Parse(await client.GetStringAsync("/api/reports/templates"));
@@ -73,7 +74,8 @@ public class ReportTemplateCrudPostgresApiTests
             using var otherAccount = JsonDocument.Parse(await other.GetStringAsync("/api/account/me"));
             var otherOwner = otherAccount.RootElement.GetProperty("id").GetGuid();
             using var otherPermission = await Send(client, HttpMethod.Put, $"/api/users/{otherOwner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-            Assert.Equal(HttpStatusCode.OK, otherPermission.StatusCode);
+            // Cross-account grants must remain forbidden.
+            Assert.Equal(HttpStatusCode.Forbidden, otherPermission.StatusCode);
             using var otherLogin = await Send(other, HttpMethod.Post, "/api/account/login", new { email = otherEmail, password = otherPassword });
             Assert.Equal(HttpStatusCode.OK, otherLogin.StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(location)).StatusCode);

@@ -27,8 +27,7 @@ public interface IAccountService
     Task<AccountDto> RegisterAsync(RegisterAccountRequest request, CancellationToken cancellationToken);
     Task<AccountDto?> ValidateLoginAsync(LoginAccountRequest request, CancellationToken cancellationToken);
     Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken);
-    Task<IReadOnlyList<PortalAccountListItemDto>> ListAccountsAsync(CancellationToken cancellationToken);
-    Task ResetPasswordToDefaultAsync(Guid userId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PortalAccountListItemDto>> ListAccountsAsync(Guid actorUserId, CancellationToken cancellationToken);
     Task<AccountProfileDto?> GetProfileAsync(Guid userId, CancellationToken cancellationToken);
     Task<string> ConnectMoodleAsync(ConnectMoodleAccountRequest request, CancellationToken cancellationToken);
     Task<MoodleConnectionValidationDto> ValidateMoodleAsync(Guid userId, string moodleId, CancellationToken cancellationToken);

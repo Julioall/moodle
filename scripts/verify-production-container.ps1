@@ -54,6 +54,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "A imagem '$Image' não existe localmente. Crie-a antes de executar esta certificação."
 }
 
+# The production image must not serve requests as root.
+$imageUser = (& docker image inspect --format '{{.Config.User}}' $Image).Trim()
+if ([string]::IsNullOrWhiteSpace($imageUser) -or $imageUser -in @('root', '0')) {
+    throw 'A imagem de produção deve configurar um usuário não-root.'
+}
+
 if ($HostPort -eq 0) {
     $HostPort = Get-FreeLoopbackPort
 }
@@ -117,8 +123,12 @@ try {
         --env 'AdminApi__ApiKey=production-validation-admin-key' `
         --env 'MEDIATR_LICENSE_KEY=production-validation-license' `
         --env 'GradingLimits__GradingPackageBlobRootDirectory=/app/data/private-grading-packages' `
+        --env 'McpServerSecurity__RequireJwt=true' `
+        --env 'McpServerSecurity__RequireApiKey=false' `
+        --env 'OAuth__RequireHttpsMetadata=true' `
         --env 'OAuth__Issuer=https://validation.example' `
         --env 'OAuth__Audience=https://validation.example/mcp' `
+        --env 'Registration__PublicEnabled=false' `
         $Image *> $null
     if ($LASTEXITCODE -ne 0) {
         throw 'Não foi possível iniciar a imagem de produção temporária.'

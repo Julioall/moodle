@@ -24,12 +24,4 @@
   <ItemGroup>
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="..\..\public\pedagogic\**\*.md">
-      <Link>public/pedagogic/%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>

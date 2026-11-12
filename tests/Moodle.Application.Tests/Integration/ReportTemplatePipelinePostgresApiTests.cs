@@ -57,8 +57,10 @@ public sealed class ReportTemplatePipelinePostgresApiTests
             Assert.Equal(HttpStatusCode.OK, register.StatusCode);
             using var me = JsonDocument.Parse(await client.GetStringAsync("/api/account/me"));
             var owner = me.RootElement.GetProperty("id").GetGuid();
+            // The account's initial group already grants reports.view. The
+            // HTTP administration endpoint must reject self-escalation.
             using var permission = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-            Assert.Equal(HttpStatusCode.OK, permission.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, permission.StatusCode);
             using (var seed = factory.Services.CreateScope())
             {
                 var db = seed.ServiceProvider.GetRequiredService<ConnectorDbContext>();
@@ -187,8 +189,10 @@ public sealed class ReportTemplatePipelinePostgresApiTests
             Assert.Equal(HttpStatusCode.OK, register.StatusCode);
             using var me = JsonDocument.Parse(await client.GetStringAsync("/api/account/me"));
             var owner = me.RootElement.GetProperty("id").GetGuid();
+            // The account's initial group already grants reports.view. The
+            // HTTP administration endpoint must reject self-escalation.
             using var permission = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-            Assert.Equal(HttpStatusCode.OK, permission.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, permission.StatusCode);
             using (var seedScope = factory.Services.CreateScope())
             {
                 var db = seedScope.ServiceProvider.GetRequiredService<ConnectorDbContext>();
@@ -258,9 +262,10 @@ public sealed class ReportTemplatePipelinePostgresApiTests
             Assert.Equal(HttpStatusCode.OK, otherRegister.StatusCode);
             using var otherMe = JsonDocument.Parse(await other.GetStringAsync("/api/account/me"));
             var otherId = otherMe.RootElement.GetProperty("id").GetGuid();
+            // A user's permissions cannot be changed by another unrelated account.
             using var otherPermission = await Send(client, HttpMethod.Put, $"/api/users/{otherId}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-            Assert.Equal(HttpStatusCode.OK, otherPermission.StatusCode);
-            // Refresh claims without relying on the default account permissions.
+            Assert.Equal(HttpStatusCode.Forbidden, otherPermission.StatusCode);
+            // The default personal group permits read-only reports without this update.
             using var otherLogin = await Send(other, HttpMethod.Post, "/api/account/login", new { email = otherEmail, password });
             Assert.Equal(HttpStatusCode.OK, otherLogin.StatusCode);
             using var denied = await other.GetAsync($"/api/reports/jobs/{xlsxId}/download");
@@ -382,14 +387,30 @@ public sealed class ReportTemplatePipelinePostgresApiTests
     {
         var input = new { refreshFromJobId = source };
         var permissionJob = await Submit(client, input);
-        using var revoke = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = false });
-        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        // Simulate an audited revocation from the identity administration
+        // plane. The portal endpoint is deliberately closed to self-grants.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ConnectorDbContext>();
+            db.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+            {
+                Id = Guid.NewGuid(), UserId = owner, Permission = "reports.view",
+                IsAllowed = false, ChangedByUserId = owner
+            });
+            await db.SaveChangesAsync();
+        }
         var before = data.Transport.Calls.Count;
         await Process(factory);
         Assert.Equal(before, data.Transport.Calls.Count);
         await FailedWithoutBlob(factory, permissionJob, "report_permission_denied");
-        using var restore = await Send(client, HttpMethod.Put, $"/api/users/{owner}/platform-permissions", new { permission = "reports.view", isAllowed = true });
-        Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ConnectorDbContext>();
+            var grant = await db.UserPermissionOverrides.SingleAsync(item =>
+                item.UserId == owner && item.Permission == "reports.view");
+            grant.IsAllowed = true;
+            await db.SaveChangesAsync();
+        }
         var courseJob = await Submit(client, input);
         data.Courses.Inaccessible.Add("1");
         await Process(factory);

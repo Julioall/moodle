@@ -11,6 +11,8 @@ vi.mock('../features/auth/auth-gateway', () => ({
     login: vi.fn(),
     register: vi.fn(),
     connectMoodle: vi.fn(),
+    requestPasswordReset: vi.fn(),
+    completePasswordReset: vi.fn(),
   },
 }));
 
@@ -65,4 +67,27 @@ describe('AuthPage', () => {
     finishLogin({ hasMoodleConnected: false });
     expect(await screen.findByRole('button', { name: 'Conectar Moodle' })).toBeInTheDocument();
   });
+  it('requests recovery without revealing account existence', async () => {
+    vi.mocked(authGateway.requestPasswordReset).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    render(<AuthPage />);
+    await user.click(screen.getByRole('button', { name: 'Esqueci minha senha' }));
+    await user.type(screen.getByLabelText('E-mail'), 'tutor@example.com');
+    await user.click(screen.getByRole('button', { name: 'Enviar instruções' }));
+    expect(await authGateway.requestPasswordReset).toHaveBeenCalledWith('tutor@example.com');
+    expect(await screen.findByRole('status')).toHaveTextContent('Se a conta existir');
+  });
+
+  it('submits a one-time recovery token', async () => {
+    window.history.replaceState({}, '', '/#resetToken=fixture-token');
+    vi.mocked(authGateway.completePasswordReset).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    render(<AuthPage />);
+    await user.type(screen.getByLabelText('Nova senha'), 'nova-senha-segura-123');
+    await user.type(screen.getByLabelText('Confirmar senha'), 'nova-senha-segura-123');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
+    expect(await authGateway.completePasswordReset).toHaveBeenCalledWith('fixture-token', 'nova-senha-segura-123');
+    expect(await screen.findByRole('heading', { name: 'Entrar no Moodle Conector' })).toBeInTheDocument();
+  });
+
 });

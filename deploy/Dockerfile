@@ -16,7 +16,6 @@ COPY src/Moodle.Presentation/Moodle.Presentation.csproj src/Moodle.Presentation/
 RUN dotnet restore src/Moodle.Presentation/Moodle.Presentation.csproj
 
 COPY src/ src/
-COPY public/ public/
 COPY --from=web-build /web/dist/ src/Moodle.Presentation/wwwroot/
 
 RUN dotnet publish src/Moodle.Presentation/Moodle.Presentation.csproj \
@@ -40,5 +39,12 @@ ENV Features__AppV2Enabled=true
 EXPOSE 8080
 
 COPY --from=build /app/publish ./
+
+# Persisted data, OAuth certificates and local report artifacts are writable
+# only by the unprivileged application account. Published application binaries
+# remain root-owned and are not writable by the runtime process.
+RUN mkdir -p /app/data /app/App_Data /app/private-report-artifacts \
+    && chown -R app:app /app/data /app/App_Data /app/private-report-artifacts
+USER $APP_UID
 
 ENTRYPOINT ["dotnet", "Moodle.Presentation.dll"]

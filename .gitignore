@@ -60,6 +60,4 @@ scratch/
 node_modules
 src/Moodle.Web/dist/
 public/Captura*.png
-public/pedagogic/*.md
-!public/pedagogic/
-!public/pedagogic/*.md
+public/pedagogic/

@@ -58,10 +58,6 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
-            .AddOptions<PasswordRecoveryOptions>()
-            .Bind(configuration.GetSection(PasswordRecoveryOptions.SectionName));
-
-        services
             .AddOptions<MoodleApiOptions>()
             .Bind(configuration.GetSection(MoodleApiOptions.SectionName));
 
@@ -190,8 +186,12 @@ public static class DependencyInjection
         services.AddHostedService(sp => sp.GetRequiredService<MoodleSnapshotSyncQueue>());
         services.AddPolicyRegistry();
         services.AddSingleton<IMoodleEndpointValidator, MoodleEndpointValidator>();
-        services.AddSingleton<IPedagogicGuidanceSearch>(_ =>
-            new MarkdownPedagogicGuidanceSearch(Path.Combine(AppContext.BaseDirectory, "public", "pedagogic")));
+        // Institutional guides are not bundled in the public image. An approved
+        // licensed corpus may be mounted separately in a private directory.
+        services.AddSingleton<IPedagogicGuidanceSearch>(sp =>
+            new MarkdownPedagogicGuidanceSearch(
+                sp.GetRequiredService<IConfiguration>()["PedagogicGuidance:RootPath"]
+                ?? Path.Combine(AppContext.BaseDirectory, "data", "private-pedagogic")));
         services.AddScoped<IPendingMoodleActionRepository, PendingMoodleActionRepository>();
         services.AddScoped<GradingReviewRepository>();
         services.AddScoped<IGradingReviewRepository>(sp => sp.GetRequiredService<GradingReviewRepository>());
@@ -320,6 +320,14 @@ public static class DependencyInjection
             .AddHttpClient<IMoodleProxyGateway, MoodleProxyGateway>(ConfigureMoodleProxyClient)
             .AddMoodleResilience(moodleProxyResilience);
 
+        services
+            .AddOptions<PasswordResetOptions>()
+            .Bind(configuration.GetSection(PasswordResetOptions.SectionName))
+            .Validate(options => !options.Enabled || options.IsReady, "PasswordReset SMTP requer HTTPS, remetente e credenciais válidas.")
+            .ValidateOnStart();
+        services.AddScoped<IPasswordResetMailer, SmtpPasswordResetMailer>();
+        services.AddScoped<IAccountPasswordResetService, AccountPasswordResetService>();
+        services.AddHostedService<PasswordResetTokenCleanupService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<ReportJobArtifactWriter>();
         services.AddScoped<ReportJobClaimer>();

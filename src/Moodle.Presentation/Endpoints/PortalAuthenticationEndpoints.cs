@@ -114,8 +114,14 @@ internal static class PortalAuthenticationEndpoints
         // before issuing claims so MCP tools do not receive a stale or empty set.
         await platformPermissionService.EnsureDefaultPermissionsAsync(id, cancellationToken);
 
+        var securityStamp = await dbContext.UserAccounts.AsNoTracking()
+            .Where(account => account.Id == id)
+            .Select(account => account.SecurityStamp)
+            .SingleAsync(cancellationToken);
+
         var claims = new List<Claim>
         {
+            new("account_security_stamp", securityStamp.ToString("N")),
             new(ClaimTypes.NameIdentifier, id.ToString()),
             new(ClaimTypes.Name, name),
             new(ClaimTypes.Email, email),

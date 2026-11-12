@@ -1,10 +1,9 @@
 namespace Moodle.Application.MoodleApi;
 
 /// <summary>
-/// Canonical mapping between a controlled Moodle write family and the OAuth
-/// scope that authorizes it. Functions outside a specialized family use the
-/// generic <c>moodle.write</c> scope, so token-enabled Moodle extensions do
-/// not need to be added to this source file before they can be confirmed.
+/// Explicit allowlist of controlled Moodle write families and their
+/// delegated OAuth scopes. New or destructive Moodle functions must be
+/// reviewed and mapped before they can be prepared or confirmed.
 /// </summary>
 public static class MoodleWriteScopePolicy
 {
@@ -38,7 +37,11 @@ public static class MoodleWriteScopePolicy
             throw new ArgumentException("A função Moodle é obrigatória.", nameof(functionName));
         }
 
-        return "moodle.write";
+        // An arbitrary Moodle function must never inherit a broad delegated
+        // write scope merely because another write capability was granted.
+        throw new MoodleApiException(
+            "moodle_write_function_unclassified",
+            "A função Moodle não possui política explícita de escrita autorizada.");
     }
 }
 

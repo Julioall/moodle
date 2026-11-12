@@ -69,6 +69,36 @@ public sealed class AccountDeletionTests
         Assert.Equal(selfDeleteArtifactKey, (await dbContext.ReportArtifactDeletions.SingleAsync()).ArtifactBlobKey);
     }
 
+    [Fact]
+    public async Task DeleteAccountAsync_RefusesToRemoveAnInstitutionallyLinkedAccount()
+    {
+        await using var db = new ConnectorDbContext(new DbContextOptionsBuilder<ConnectorDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options);
+        var owner = Guid.NewGuid();
+        var institution = Guid.NewGuid();
+        db.UserAccounts.Add(new UserAccountEntity
+        {
+            Id = owner, Name = "Tutor de duas instituições", Email = "tutor@example.test",
+            PasswordHash = PasswordHasher.Hash("senha-segura-123")
+        });
+        db.Teams.Add(new TeamEntity
+        {
+            Id = institution, Name = "Instituição A", CreatedByUserId = owner, IsPersonal = false
+        });
+        db.TeamMemberships.Add(new TeamMembershipEntity
+        {
+            Id = Guid.NewGuid(), TeamId = institution, UserId = owner,
+            Role = "administrator", IsActive = true
+        });
+        await db.SaveChangesAsync();
+        var service = new AccountService(db, null!, null!, null!);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAccountAsync(
+            new DeleteAccountRequest(owner, "senha-segura-123", "EXCLUIR MINHA CONTA"),
+            CancellationToken.None));
+        Assert.True(await db.UserAccounts.AnyAsync(item => item.Id == owner));
+        Assert.True(await db.TeamMemberships.AnyAsync(item => item.UserId == owner && item.IsActive));
+    }
+
     [Theory]
     [InlineData("senha-incorreta", "EXCLUIR MINHA CONTA")]
     [InlineData("senha-segura-123", "excluir minha conta")]
@@ -96,7 +126,7 @@ public sealed class AccountDeletionTests
     }
 
     [Fact]
-    public async Task DeleteAccountsAsAdminAsync_RemovesSelectedAccountDataAndKeepsActor()
+    public async Task DeleteAccountsAsAdminAsync_IsDisabledEvenWithValidActorPassword()
     {
         var options = new DbContextOptionsBuilder<ConnectorDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -166,22 +196,19 @@ public sealed class AccountDeletionTests
         await dbContext.SaveChangesAsync();
 
         var service = new AccountService(dbContext, null!, null!, null!);
-        var result = await service.DeleteAccountsAsAdminAsync(
-            new AdminDeleteAccountsRequest(actorId, [targetId], "senha-admin-123", "APAGAR 1 CONTA"),
-            CancellationToken.None);
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            service.DeleteAccountsAsAdminAsync(
+                new AdminDeleteAccountsRequest(actorId, [targetId], "senha-admin-123", "APAGAR 1 CONTA"),
+                CancellationToken.None));
 
-        Assert.Equal(1, result.DeletedAccounts);
-        Assert.Equal(1, result.DeletedConnections);
-        Assert.Equal(1, result.DeletedTasks);
-        Assert.Equal(1, result.DeletedEvents);
-        Assert.Equal(1, result.DeletedReports);
+        // The target's account and data must survive direct service calls.
         Assert.NotNull(await dbContext.UserAccounts.FindAsync(actorId));
-        Assert.Null(await dbContext.UserAccounts.FindAsync(targetId));
-        Assert.Empty(await dbContext.ConnectorClients.ToListAsync());
-        Assert.Empty(await dbContext.Tasks.ToListAsync());
-        Assert.Empty(await dbContext.CalendarEvents.ToListAsync());
-        Assert.Empty(await dbContext.ReportJobs.ToListAsync());
-        Assert.Equal(artifactBlobKey, (await dbContext.ReportArtifactDeletions.SingleAsync()).ArtifactBlobKey);
+        Assert.NotNull(await dbContext.UserAccounts.FindAsync(targetId));
+        Assert.Single(await dbContext.ConnectorClients.ToListAsync());
+        Assert.Single(await dbContext.Tasks.ToListAsync());
+        Assert.Single(await dbContext.CalendarEvents.ToListAsync());
+        Assert.Single(await dbContext.ReportJobs.ToListAsync());
+        Assert.Empty(await dbContext.ReportArtifactDeletions.ToListAsync());
     }
 
     [Fact]
@@ -202,7 +229,7 @@ public sealed class AccountDeletionTests
         await dbContext.SaveChangesAsync();
         var service = new AccountService(dbContext, null!, null!, null!);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAccountsAsAdminAsync(
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.DeleteAccountsAsAdminAsync(
             new AdminDeleteAccountsRequest(actorId, [actorId], "senha-admin-123", "APAGAR 1 CONTA"),
             CancellationToken.None));
 

@@ -1,9 +1,7 @@
 using System.Net.Mail;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Moodle.Application.Abstractions;
-using Moodle.Infrastructure.Configuration;
 
 namespace Moodle.Infrastructure;
 
@@ -13,8 +11,7 @@ internal sealed class AccountService(
     IConnectorClientRegistrationService registrationService,
     IMoodleCredentialValidator moodleValidator,
     ITeamAccessService? teamAccessService = null,
-    IPlatformPermissionService? platformPermissionService = null,
-    IOptions<PasswordRecoveryOptions>? passwordRecoveryOptions = null) : IAccountService
+    IPlatformPermissionService? platformPermissionService = null) : IAccountService
 {
     private const int MinimumPasswordLength = 8;
     private const int MaximumPasswordLength = 256;
@@ -84,29 +81,36 @@ internal sealed class AccountService(
 
         ValidatePassword(request.NewPassword);
         account.PasswordHash = PasswordHasher.Hash(request.NewPassword);
+        account.SecurityStamp = Guid.NewGuid();
         account.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        account.ApiKeyEncrypted = null;
+        var clientId = account.ConnectorClientId ?? account.Id.ToString();
+        foreach (var client in await dbContext.ConnectorClients
+            .Where(item => item.ClientId == clientId).ToListAsync(cancellationToken))
+            client.ApiKeyHash = null;
+        foreach (var token in await dbContext.OAuthTokens
+            .Where(item => item.Subject == account.Id.ToString()).ToListAsync(cancellationToken))
+            token.Status = "revoked";
+        foreach (var token in await dbContext.PasswordResetTokens
+            .Where(item => item.UserId == account.Id && item.ConsumedAtUtc == null).ToListAsync(cancellationToken))
+            token.ConsumedAtUtc = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<PortalAccountListItemDto>> ListAccountsAsync(CancellationToken cancellationToken)
-        => await dbContext.UserAccounts.AsNoTracking()
+    public async Task<IReadOnlyList<PortalAccountListItemDto>> ListAccountsAsync(Guid actorUserId, CancellationToken cancellationToken)
+    {
+        var teamIds = await dbContext.TeamMemberships.AsNoTracking()
+            .Where(member => member.UserId == actorUserId && member.IsActive &&
+                member.Role == "administrator" &&
+                dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal))
+            .Select(member => member.TeamId).ToArrayAsync(cancellationToken);
+        return await dbContext.UserAccounts.AsNoTracking()
+            .Where(account => dbContext.TeamMemberships.Any(member =>
+                member.UserId == account.Id && member.IsActive && teamIds.Contains(member.TeamId)))
             .OrderBy(account => account.Name)
             .ThenBy(account => account.Email)
             .Select(account => new PortalAccountListItemDto(account.Id, account.Name, account.Email, account.CreatedAtUtc))
             .ToArrayAsync(cancellationToken);
-
-    public async Task ResetPasswordToDefaultAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var defaultPassword = passwordRecoveryOptions?.Value.DefaultPassword;
-        if (string.IsNullOrWhiteSpace(defaultPassword))
-            throw new InvalidOperationException("Configure PasswordRecovery:DefaultPassword para habilitar a redefinição administrativa de senha.");
-        ValidatePassword(defaultPassword);
-
-        var account = await dbContext.UserAccounts.FindAsync([userId], cancellationToken)
-            ?? throw new InvalidOperationException("Usuário não encontrado.");
-        account.PasswordHash = PasswordHasher.Hash(defaultPassword);
-        account.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<AccountProfileDto?> GetProfileAsync(Guid userId, CancellationToken cancellationToken)
@@ -442,6 +446,14 @@ internal sealed class AccountService(
         if (string.IsNullOrWhiteSpace(request.Password) || !PasswordHasher.Verify(request.Password, account.PasswordHash))
             throw new InvalidOperationException("Senha atual inválida.");
 
+        // A global account may participate in multiple academic institutions.
+        // A personal deletion cannot silently erase institutional obligations.
+        var hasInstitutionalMembership = await dbContext.TeamMemberships.AsNoTracking()
+            .AnyAsync(member => member.UserId == account.Id && member.IsActive &&
+                dbContext.Teams.Any(team => team.Id == member.TeamId && !team.IsPersonal), cancellationToken);
+        if (hasInstitutionalMembership)
+            throw new InvalidOperationException("Conta vinculada a uma instituição: a baixa deve passar pelo procedimento institucional de desvinculação.");
+
         var transaction = await BeginDeletionTransactionAsync(cancellationToken);
         try
         {
@@ -460,69 +472,14 @@ internal sealed class AccountService(
         }
     }
 
-    public async Task<AdminDeleteAccountsResultDto> DeleteAccountsAsAdminAsync(
+    public Task<AdminDeleteAccountsResultDto> DeleteAccountsAsAdminAsync(
         AdminDeleteAccountsRequest request,
         CancellationToken cancellationToken)
     {
-        var requestedIds = request.UserIds?.ToArray() ?? [];
-        if (requestedIds.Length == 0)
-            throw new ArgumentException("Selecione pelo menos uma conta para excluir.", nameof(request.UserIds));
-        if (requestedIds.Length > MaximumAdminAccountDeletionCount)
-            throw new ArgumentException($"É permitido excluir no máximo {MaximumAdminAccountDeletionCount} contas por operação.", nameof(request.UserIds));
-        if (requestedIds.Any(id => id == Guid.Empty) || requestedIds.Distinct().Count() != requestedIds.Length)
-            throw new ArgumentException("A seleção de contas contém identificadores inválidos ou repetidos.", nameof(request.UserIds));
-        if (requestedIds.Contains(request.ActorUserId))
-            throw new InvalidOperationException("A própria conta administrativa não pode ser excluída por este fluxo.");
-
-        var expectedConfirmation = BuildAdminDeleteConfirmation(requestedIds.Length);
-        if (!string.Equals(request.ConfirmationText?.Trim(), expectedConfirmation, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Digite {expectedConfirmation} para confirmar a exclusão definitiva.");
-
-        var actor = await dbContext.UserAccounts.FindAsync([request.ActorUserId], cancellationToken)
-            ?? throw new InvalidOperationException("Sessão administrativa inválida.");
-        if (string.IsNullOrWhiteSpace(request.Password) || !PasswordHasher.Verify(request.Password, actor.PasswordHash))
-            throw new InvalidOperationException("Senha atual do administrador inválida.");
-
-        var accounts = await dbContext.UserAccounts
-            .Where(account => requestedIds.Contains(account.Id))
-            .ToListAsync(cancellationToken);
-        if (accounts.Count != requestedIds.Length)
-            throw new InvalidOperationException("Uma ou mais contas selecionadas não existem mais. Atualize a lista e tente novamente.");
-
-        var transaction = await BeginDeletionTransactionAsync(cancellationToken);
-        var deletedConnections = 0;
-        var deletedTasks = 0;
-        var deletedEvents = 0;
-        var deletedReports = 0;
-        try
-        {
-            foreach (var account in accounts)
-            {
-                var summary = await DeleteAccountDataAsync(account, cancellationToken);
-                deletedConnections += summary.Connections;
-                deletedTasks += summary.Tasks;
-                deletedEvents += summary.Events;
-                deletedReports += summary.Reports;
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            return new AdminDeleteAccountsResultDto(
-                accounts.Count,
-                deletedConnections,
-                deletedTasks,
-                deletedEvents,
-                deletedReports);
-        }
-        catch
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw;
-        }
-        finally
-        {
-            if (transaction is not null) await transaction.DisposeAsync();
-        }
+        // Fail closed at the service boundary as well as the HTTP endpoint.
+        // Deleting a global user would erase data belonging to other institutions.
+        throw new NotSupportedException(
+            "A exclusão administrativa de contas foi desativada até existir autorização por instituição e trilha de auditoria.");
     }
 
     private async Task<AccountDeletionSummary> DeleteAccountDataAsync(
@@ -530,6 +487,9 @@ internal sealed class AccountService(
         CancellationToken cancellationToken)
     {
         var clientId = account.ConnectorClientId ?? account.Id.ToString();
+        var resetTokens = await dbContext.PasswordResetTokens
+            .Where(item => item.UserId == account.Id).ToArrayAsync(cancellationToken);
+        dbContext.PasswordResetTokens.RemoveRange(resetTokens);
         var subjects = new[] { account.Id.ToString(), clientId }.Distinct().ToArray();
 
         var taskIds = (await dbContext.Tasks.AsNoTracking()

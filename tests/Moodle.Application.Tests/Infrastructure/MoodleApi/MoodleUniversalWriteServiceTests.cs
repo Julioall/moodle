@@ -196,49 +196,40 @@ public sealed class MoodleUniversalWriteServiceTests
     }
 
     [Fact]
-    public async Task PrepareAsync_PermiteFuncaoDestrutivaSomenteNoFluxoDeConfirmacao()
+    public async Task PrepareAsync_BloqueiaFuncaoDestrutivaSemPoliticaExplicita()
     {
+        var rest = new FakeRestClient();
+        var pending = new FakePendingActions();
         var profile = Profile(new MoodleFunctionDescriptor("core_course_delete_courses", MoodleFunctionRisk.Destructive, true));
-        var sut = CreateService(
-            new FakeRestClient(),
-            new FakePendingActions(),
-            enabled: true,
-            profile: profile,
-            currentUser: new FakeCurrentUser("moodle.write"));
+        var sut = CreateService(rest, pending, enabled: true,
+            profile: profile, currentUser: new FakeCurrentUser("moodle.write"));
 
-        var preview = await sut.PrepareAsync(
-            "core_course_delete_courses", new Dictionary<string, object?>(), CancellationToken.None);
+        var error = await Assert.ThrowsAsync<MoodleApiException>(() =>
+            sut.PrepareAsync("core_course_delete_courses", new Dictionary<string, object?>(),
+                CancellationToken.None));
 
-        Assert.Equal("core_course_delete_courses", preview.Function);
+        Assert.Equal("moodle_write_function_unclassified", error.ErrorCode);
+        Assert.Null(pending.Action);
+        Assert.Equal(0, rest.Calls);
     }
 
-    [Fact]
-    public async Task PrepareAsync_ExigeEscopoGenericoParaFuncaoSemFamiliaEspecializada()
+    [Theory]
+    [InlineData("mod_assign_set_user_flags")]
+    [InlineData("future_moodle_write_function")]
+    public async Task PrepareAsync_BloqueiaFuncaoDesconhecidaMesmoComEscopoGenerico(string functionName)
     {
-        var profile = Profile(new MoodleFunctionDescriptor("mod_assign_set_user_flags", MoodleFunctionRisk.ControlledWrite, true));
-        var sut = CreateService(new FakeRestClient(), new FakePendingActions(), enabled: true, profile: profile);
+        var rest = new FakeRestClient();
+        var pending = new FakePendingActions();
+        var profile = Profile(new MoodleFunctionDescriptor(functionName, MoodleFunctionRisk.ControlledWrite, true));
+        var sut = CreateService(rest, pending, enabled: true,
+            profile: profile, currentUser: new FakeCurrentUser("moodle.write"));
 
-        var error = await Assert.ThrowsAsync<MoodleApiException>(() => sut.PrepareAsync(
-            "mod_assign_set_user_flags", new Dictionary<string, object?>(), CancellationToken.None));
+        var error = await Assert.ThrowsAsync<MoodleApiException>(() =>
+            sut.PrepareAsync(functionName, new Dictionary<string, object?>(), CancellationToken.None));
 
-        Assert.Equal("moodle_write_scope_required", error.ErrorCode);
-    }
-
-    [Fact]
-    public async Task PrepareAsync_PermiteFuncaoControladaComEscopoGenerico()
-    {
-        var profile = Profile(new MoodleFunctionDescriptor("mod_assign_set_user_flags", MoodleFunctionRisk.ControlledWrite, true));
-        var sut = CreateService(
-            new FakeRestClient(),
-            new FakePendingActions(),
-            enabled: true,
-            profile: profile,
-            currentUser: new FakeCurrentUser("moodle.write"));
-
-        var preview = await sut.PrepareAsync(
-            "mod_assign_set_user_flags", new Dictionary<string, object?>(), CancellationToken.None);
-
-        Assert.Equal("mod_assign_set_user_flags", preview.Function);
+        Assert.Equal("moodle_write_function_unclassified", error.ErrorCode);
+        Assert.Null(pending.Action);
+        Assert.Equal(0, rest.Calls);
     }
 
     [Fact]

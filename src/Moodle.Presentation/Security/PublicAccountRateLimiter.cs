@@ -11,7 +11,8 @@ namespace Moodle.Presentation.Security;
 public enum PublicAccountOperation
 {
     Login = 0,
-    Registration = 1
+    Registration = 1,
+    PasswordReset = 2
 }
 
 /// <summary>
@@ -74,6 +75,7 @@ public sealed class PublicAccountRateLimiter : IDisposable
         {
             PublicAccountOperation.Login => "login",
             PublicAccountOperation.Registration => "registration",
+            PublicAccountOperation.PasswordReset => "password_reset",
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
 
