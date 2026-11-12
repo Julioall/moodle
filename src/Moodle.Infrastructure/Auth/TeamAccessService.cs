@@ -85,6 +85,13 @@ internal sealed class TeamAccessService(
     public async Task<TeamDto> AcceptInvitationAsync(Guid userId, string email, string token, CancellationToken cancellationToken)
     {
         var normalizedEmail = NormalizeEmail(email);
+        var accountEmail = await dbContext.UserAccounts.AsNoTracking()
+            .Where(account => account.Id == userId)
+            .Select(account => account.Email)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (accountEmail is null || NormalizeEmail(accountEmail) != normalizedEmail)
+            throw new InvalidOperationException("O convite não pertence à conta autenticada.");
+
         var hash = HashToken(token);
         var invitation = await dbContext.TeamInvitations.FirstOrDefaultAsync(item =>
             item.InviteeEmail == normalizedEmail && item.TokenHash == hash && item.AcceptedAtUtc == null,
@@ -115,7 +122,25 @@ internal sealed class TeamAccessService(
         }
         invitation.AcceptedAtUtc = DateTimeOffset.UtcNow;
         invitation.AcceptedByUserId = userId;
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        // A new institutional role must not silently extend existing cookie/JWT
+        // sessions. Revoking the prior account generation is intentional.
+        var account = await dbContext.UserAccounts.FindAsync([userId], cancellationToken)
+            ?? throw new InvalidOperationException("Conta de destino não encontrada.");
+        account.SecurityStamp = Guid.NewGuid();
+        account.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        try
+        {
+            // AcceptedAtUtc is an EF concurrency token. Only one concurrent
+            // request may redeem a given invitation; relational writes roll
+            // back together if its optimistic concurrency check fails.
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new InvalidOperationException("Convite inválido ou já utilizado.");
+        }
+
         var team = await dbContext.Teams.FindAsync([invitation.TeamId], cancellationToken)
             ?? throw new InvalidOperationException("Equipe do convite não encontrada.");
         return ToDto(team, existing);

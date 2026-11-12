@@ -48,11 +48,58 @@ public sealed class TeamAccessServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.AcceptInvitationAsync(inviteeId, "other@example.com", invitation.Token, CancellationToken.None));
 
+        var previousStamp = (await dbContext.UserAccounts.SingleAsync(account => account.Id == inviteeId)).SecurityStamp;
         var accepted = await sut.AcceptInvitationAsync(inviteeId, "invitee@example.com", invitation.Token, CancellationToken.None);
 
+        Assert.NotEqual(previousStamp, (await dbContext.UserAccounts.SingleAsync(account => account.Id == inviteeId)).SecurityStamp);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.AcceptInvitationAsync(inviteeId, "invitee@example.com", invitation.Token, CancellationToken.None));
         Assert.Equal(team.Id, accepted.Id);
         Assert.Equal("tutor", accepted.Role);
         Assert.Equal(inviteeId, (await dbContext.TeamMemberships.SingleAsync(item => item.UserId == inviteeId)).UserId);
+    }
+
+    [Fact]
+    public async Task InvitationCannotBeAcceptedByAnotherAccountEvenIfItsEmailIsSupplied()
+    {
+        await using var dbContext = CreateContext();
+        var ownerId = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var attackerId = Guid.NewGuid();
+        dbContext.UserAccounts.AddRange(
+            new UserAccountEntity { Id = ownerId, Name = "Owner", Email = "owner@example.com", PasswordHash = "hash" },
+            new UserAccountEntity { Id = inviteeId, Name = "Invitee", Email = "invitee@example.com", PasswordHash = "hash" },
+            new UserAccountEntity { Id = attackerId, Name = "Other account", Email = "other@example.com", PasswordHash = "hash" });
+        var permissions = new PlatformPermissionService(dbContext);
+        await dbContext.SaveChangesAsync();
+        await permissions.EnsureDefaultPermissionsAsync(ownerId, CancellationToken.None);
+        dbContext.UserPermissionOverrides.Add(new UserPermissionOverrideEntity
+        {
+            Id = Guid.NewGuid(), UserId = ownerId, ChangedByUserId = ownerId,
+            Permission = PlatformPermissionCatalog.TeamsManage, IsAllowed = true
+        });
+        await dbContext.SaveChangesAsync();
+        var sut = new TeamAccessService(dbContext, permissions);
+        var team = await sut.CreatePersonalTeamAsync(ownerId, "Owner", CancellationToken.None);
+        var invitation = await sut.CreateInvitationAsync(
+            new CreateTeamInvitationRequest(ownerId, team.Id, "invitee@example.com", "tutor",
+                ["moodle.read.courses"], TimeSpan.FromHours(1)), CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.AcceptInvitationAsync(attackerId, "invitee@example.com", invitation.Token, CancellationToken.None));
+        Assert.Null((await dbContext.TeamInvitations.SingleAsync()).AcceptedAtUtc);
+        Assert.DoesNotContain(await dbContext.TeamMemberships.ToArrayAsync(),
+            membership => membership.UserId == attackerId && membership.TeamId == team.Id);
+        Assert.Equal(team.Id, (await sut.AcceptInvitationAsync(inviteeId, "invitee@example.com",
+            invitation.Token, CancellationToken.None)).Id);
+    }
+
+    [Fact]
+    public void InvitationConsumptionUsesOptimisticConcurrency()
+    {
+        using var dbContext = CreateContext();
+        var entity = dbContext.Model.FindEntityType(typeof(TeamInvitationEntity));
+        Assert.True(entity!.FindProperty(nameof(TeamInvitationEntity.AcceptedAtUtc))!.IsConcurrencyToken);
     }
 
     [Fact]

@@ -298,6 +298,7 @@ internal static class PortalAccountEndpoints
             HttpContext context,
             ConnectorDbContext dbContext,
             ITeamAccessService teamAccessService,
+            IPlatformPermissionService platformPermissionService,
             IAntiforgery antiforgery,
             CancellationToken cancellationToken) =>
         {
@@ -310,6 +311,11 @@ internal static class PortalAccountEndpoints
             try
             {
                 var team = await teamAccessService.AcceptInvitationAsync(identity.Id, identity.Email, input.Token, cancellationToken);
+                // The security stamp was rotated. Reissue the legitimate
+                // cookie so the accepting user can continue in this session.
+                await PortalAuthenticationEndpoints.SignInAppAccountAsync(context, dbContext,
+                    platformPermissionService, identity.Id, identity.Name, identity.Email, cancellationToken);
+                context.Response.Headers.CacheControl = "no-store";
                 return Results.Ok(new { ok = true, team });
             }
             catch (InvalidOperationException ex)

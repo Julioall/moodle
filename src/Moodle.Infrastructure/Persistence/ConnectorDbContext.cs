@@ -151,6 +151,7 @@ public sealed class ConnectorDbContext(DbContextOptions<ConnectorDbContext> opti
         invitation.Property(x => x.InvitedByUserId).IsRequired();
         invitation.Property(x => x.ExpiresAtUtc).IsRequired();
         invitation.Property(x => x.CreatedAtUtc).IsRequired();
+        invitation.Property(x => x.AcceptedAtUtc).IsConcurrencyToken();
         invitation.HasIndex(x => x.TokenHash).IsUnique();
         invitation.HasIndex(x => new { x.TeamId, x.InviteeEmail, x.AcceptedAtUtc });
 
