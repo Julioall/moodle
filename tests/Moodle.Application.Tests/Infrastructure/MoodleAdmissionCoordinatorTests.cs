@@ -231,16 +231,26 @@ public sealed class MoodleAdmissionCoordinatorTests
     [Fact]
     public async Task Waits_for_rate_refill_without_reserving_a_concurrency_slot()
     {
-        using var coordinator = CreateCoordinator(connectionRate: 60, connectionBurst: 1);
-        var first = Context();
+        var start = UtcNowRoundedToSecond();
+        using var clock = new ManualTimeProvider(start);
+        using var coordinator = CreateCoordinator(
+            connectionRate: 60,
+            connectionBurst: 1,
+            timeProvider: clock);
+        var first = Context(now: start);
         using (var lease = await coordinator.AcquireAsync(first, default))
             Assert.True(lease.TryStartAttempt());
 
-        var second = coordinator.AcquireAsync(Context(), default).AsTask();
-        await WaitUntilAsync(() => coordinator.QueuedGlobalForTesting == 1);
-        await Task.Delay(100);
+        var second = coordinator.AcquireAsync(Context(now: start), default).AsTask();
+        Assert.False(second.IsCompleted);
+        Assert.Equal(1, coordinator.QueuedGlobalForTesting);
+        Assert.Equal(0, coordinator.ActiveGlobalForTesting);
+
+        clock.Advance(TimeSpan.FromMilliseconds(999));
         Assert.False(second.IsCompleted);
         Assert.Equal(0, coordinator.ActiveGlobalForTesting);
+
+        clock.Advance(TimeSpan.FromMilliseconds(1));
 
         using var resumed = await second.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(1, coordinator.ActiveGlobalForTesting);
