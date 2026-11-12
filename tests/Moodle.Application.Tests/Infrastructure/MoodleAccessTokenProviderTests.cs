@@ -279,6 +279,24 @@ public sealed class MoodleAccessTokenProviderTests
     }
 
     [Fact]
+    public async Task Credential_validation_reports_when_login_service_is_unavailable()
+    {
+        var sut = new MoodleCredentialValidator(
+            new HttpClient(Handler.Json(
+                """{"error":"Web service não disponível","errorcode":"servicenotavailable"}""")),
+            Options.Create(new MoodleApiOptions { LoginService = "moodle_mobile_app" }),
+            new FixedEndpointValidator("https://ead.senai.br"));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ValidateAsync("https://ead.senai.br", "synthetic-user", "synthetic-password", CancellationToken.None));
+
+        Assert.Contains("moodle_mobile_app", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Serviços Web e REST", error.Message, StringComparison.Ordinal);
+        Assert.Contains("não confirma que a senha esteja incorreta", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("synthetic-password", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task OverviewPolicy_DoesNotExceedBudgetWhenServiceCallNeedsColdToken()
     {
         var handler = Handler.Json("""{"token":"test-token"}""");

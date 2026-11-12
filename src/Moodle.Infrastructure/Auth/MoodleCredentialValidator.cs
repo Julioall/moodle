@@ -62,6 +62,14 @@ internal sealed class MoodleCredentialValidator(
         var payload = await response.Content
             .ReadFromJsonAsync<TokenResponse>(cancellationToken: cancellationToken);
 
+        if (string.Equals(payload?.ErrorCode, "servicenotavailable", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"O serviço de login Moodle '{serviceName}' não está disponível para esta conta. " +
+                "Peça ao administrador do Moodle para habilitar Serviços Web e REST, ativar esse serviço externo e autorizar este usuário. " +
+                "Esta resposta não confirma que a senha esteja incorreta.");
+        }
+
         return payload is not null && !string.IsNullOrWhiteSpace(payload.Token);
     }
 
@@ -69,5 +77,8 @@ internal sealed class MoodleCredentialValidator(
     {
         [JsonPropertyName("token")]
         public string? Token { get; set; }
+
+        [JsonPropertyName("errorcode")]
+        public string? ErrorCode { get; set; }
     }
 }

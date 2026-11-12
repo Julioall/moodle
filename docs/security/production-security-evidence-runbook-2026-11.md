@@ -104,12 +104,41 @@ ROLLBACK;
 
 ## Teste adversarial de isolamento (mínimo)
 
-1. Criar contas sintéticas **A**, **B** e **AB** (vinculada às duas instituições), dois aliases e cursos distintos em homologação.
-2. A não consegue ler, alterar, gerar, baixar ou excluir relatórios, recursos ou notas de B, inclusive por tentativa direta de ID/URL.
-3. A não consegue gerenciar permissões da conta AB porque AB também pertence a B. Alterações em B não podem aumentar direitos em A.
-4. Desativar associação de A, repetir as mesmas chamadas com cookies/JWT antigos, conferir negativa e trilha sanitizada.
-5. Tentar exclusão administrativa em massa e autoexclusão de AB; nenhuma deve eliminar dados de B.
-6. Repetir após restore de backup e limpeza de caches, jobs e snapshots.
+Use somente dados sintéticos, contas de teste identificáveis como tal e instalações Moodle de homologação. Registre a versão/commit testado e os resultados sem nomes, e-mails, UUIDs, notas ou tokens.
+
+1. Criar instituições **A** e **B**, usuários **A-only**, **B-only** e **AB** (vinculado às duas), conexões Moodle distintas e cursos/estudantes sintéticos exclusivos de cada conexão. Registrar previamente o mapa esperado de titularidade.
+2. Com a sessão de **A-only**, conferir lista e acesso direto por ID para cursos, estudantes, notas, submissões/arquivos, relatórios e jobs/artifacts de A e de B. Acessos e downloads de B devem ser negados sem revelar conteúdo. Repetir com **B-only** invertendo as instituições.
+3. Para cada superfície, conferir tanto a listagem quanto operações por identificador direto. Se uma escrita estiver habilitada em homologação, testar preparação e confirmação com usuário, instituição, conexão e curso corretos; chamadas cruzadas devem falhar antes de alterar Moodle ou criar/entregar artifacts.
+4. Com **AB**, verificar acesso aos recursos de A e B segundo os vínculos ativos. Um administrador de A não pode alterar permissões ou associação institucional de **AB**, pois isso afetaria também B. Uma alteração autorizada em B não pode conceder direitos em A.
+5. Desativar o vínculo de **AB** com A. Depois de renovar a autenticação, confirmar acesso negado a A e preservado em B. Repetir com cookie/JWT anterior e conferir revogação ou rejeição conforme a política implementada. Inspecionar caches, snapshots e jobs para garantir que a seleção da conexão não reaproveite dados da instituição anterior.
+6. Tentar exclusão administrativa em massa e autoexclusão de **AB**. A operação deve ser recusada enquanto não houver procedimento institucional; os dados e o vínculo de B devem continuar íntegros.
+7. Repetir a matriz após restaurar o backup em homologação, aplicar as migrações pendentes pelo inicializador normal e limpar caches descartáveis. Registrar também quaisquer falhas, sem anexar respostas que contenham dados de teste desnecessários.
+
+### Registro mínimo do ensaio
+
+| Campo | Valor a registrar |
+|---|---|
+| Ambiente e data | Identificador de homologação e horário com fuso |
+| Código | SHA/commit e versão da imagem testada |
+| Dados | Confirmação de que contas, cursos, notas e arquivos eram sintéticos |
+| Cobertura | Superfície, papel (A-only/B-only/AB), conexão e cenário testado |
+| Resultado | Permitido/negado esperado, resultado observado e aprovado/reprovado |
+| Evidência | Link restrito ao relatório sanitizado; não anexar tokens, dados pessoais ou payloads Moodle |
+| Aceite | Responsável executor e revisor institucional |
+
+Um resultado agregado como “CI verde” não substitui as linhas por superfície e por papel. Qualquer falha mantém SEC-04 pendente até correção e repetição do cenário afetado.
+
+## Restauração e migrações 085–087 em homologação
+
+1. Identificar o backup selecionado, horário de consistência, origem e SHA do código que será avaliado. Guardar o backup cifrado em local restrito; não registrar credenciais nem conteúdo de estudantes no relatório.
+2. Restaurar em banco isolado de homologação, sem apontar a aplicação para produção. Confirmar que a restauração terminou sem erro e registrar contagens agregadas das entidades necessárias antes das migrações.
+3. Inspecionar o ledger `MOODLE_schema_versions` e o schema restaurado. Executar 085–087 somente pelo inicializador/fluxo normal da aplicação e registrar versão, duração e erros; não editar ledger nem aplicar SQL manual para contornar falhas.
+4. Conferir que as três versões aparecem uma única vez e que as tabelas/colunas de tokens de recuperação e `SecurityStamp` existem. Verificar, por contagem agregada, os grants que a 085 deve revogar e a baseline do grupo `Acesso inicial`; investigar qualquer grant residual antes de aprovar.
+5. Repetir o levantamento de contagens e permissões após a migração. Não deve haver concessão elevada reintroduzida, regressão da baseline ou perda não explicada de dados. Confirmar que usuários legítimos de administração foram reprovisionados somente pelo procedimento supervisionado aprovado.
+6. Executar a matriz SEC-04 sobre a cópia restaurada. Guardar como evidência o identificador/hash do backup (sem disponibilizar o arquivo), versão de origem, versões aplicadas, resultado agregado das verificações e aceite do DBA/revisor.
+7. Se a restauração, migração ou comparação falhar, interromper a preparação de produção, preservar a cópia de homologação para diagnóstico e registrar o plano de correção. Não promover a cópia restaurada nem usar o teste como autorização de deploy.
+
+O ensaio só confirma essa combinação de backup, código e ambiente. Uma alteração posterior no schema, nas permissões ou no fluxo de restauração exige nova validação.
 
 ## SSH e configuração de aplicação
 
